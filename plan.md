@@ -2,6 +2,11 @@
 
 ## Moving forward
 
+### Technical pre-work that needs doing
+
+[ ] Sort out glad headers for use in zig
+[ ] Find good candidate for GLM replacement for zig
+
 ### Dealing with OBJ files
 
 [ ] Figure out what different parts are.
