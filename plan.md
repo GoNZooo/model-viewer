@@ -7,3 +7,7 @@
 [ ] Figure out what different parts are.
 [ ] Read file into internal object/model structure.
 [ ] Render this efficiently with respect to index maps, etc.
+
+### Graphics work
+
+[ ] Figure out basic (M)odel(V)iew(P)rojection stuff
