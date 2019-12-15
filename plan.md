@@ -4,7 +4,7 @@
 
 ### Technical pre-work that needs doing
 
-- [ ] Sort out glad headers for use in zig
+- [x] Sort out glad headers for use in zig
 - [ ] Find good candidate for GLM replacement for zig
 
 ### Dealing with OBJ files
@@ -18,7 +18,6 @@
   - [ ] Read textures(?) (`vt f32 f32`?)
   - [ ] Research what `l usize usize` means
 - [ ] Read file into internal object/model structure.
-- [ ] Render this efficiently with respect to index maps, etc.
 
 ### Graphics work
 
