@@ -1,0 +1,20 @@
+pub const rough_sphere_on_cube_data = @embedFile("../res/obj/rough-sphere-on-cube.obj");
+
+pub const rough_sphere_on_cube = parseObj(rough_sphere_on_cube_data);
+
+pub fn Vertex(comptime size: comptime_int, comptime T: type) type {
+    return struct {
+        data: [size]T,
+    };
+}
+
+pub const Index3 = struct {};
+
+pub const Obj = struct {
+    vertices: []Vertex(3, f32),
+    indices: []Index3,
+};
+
+pub fn parseObj(data: []const u8) Obj {
+    return Obj{ .vertices = &[_]Vertex(3, f32){}, .indices = &[_]Index3{} };
+}
