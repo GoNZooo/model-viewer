@@ -3,6 +3,19 @@ const Builder = @import("std").build.Builder;
 pub fn build(b: *Builder) void {
     const mode = b.standardReleaseOptions();
     const exe = b.addExecutable("model-viewer", "src/main.zig");
+
+    exe.addIncludeDir("dependencies/glad/include");
+    exe.addIncludeDir("dependencies/glfw/include");
+
+    exe.addLibPath("dependencies/glfw");
+
+    exe.linkLibC();
+    exe.linkSystemLibrary("opengl32");
+    exe.linkSystemLibrary("glfw3");
+    exe.linkSystemLibrary("shell32");
+    exe.linkSystemLibrary("user32");
+    exe.linkSystemLibrary("gdi32");
+
     exe.setBuildMode(mode);
     exe.install();
 
