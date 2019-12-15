@@ -4,6 +4,7 @@ pub fn build(b: *Builder) void {
     const mode = b.standardReleaseOptions();
     const exe = b.addExecutable("model-viewer", "src/main.zig");
 
+    exe.addCSourceFile("dependencies/glad/src/glad.c", &[_][]const u8{"-std=c99"});
     exe.addIncludeDir("dependencies/glad/include");
     exe.addIncludeDir("dependencies/glfw/include");
 
