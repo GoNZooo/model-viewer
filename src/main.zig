@@ -178,8 +178,9 @@ fn compileShader(source: []const u8, kind: glad.GLenum, name: []const u8) !glad.
     glad.glGetShaderiv(id, glad.GL_INFO_LOG_LENGTH, &error_size);
 
     const message = try c_allocator.alloc(u8, @intCast(usize, error_size));
-    glad.glGetShaderInfoLog(id, error_size, &error_size, message.ptr);
-    std.debug.panic("Error compiling {s} shader:\n{}\n", name, message.ptr);
+    var message_ptr: [*:0]u8 = @ptrCast([*:0]u8, message.ptr);
+    glad.glGetShaderInfoLog(id, error_size, &error_size, message_ptr);
+    std.debug.panic("Error compiling {s} shader:\n{}\n", name, message);
 }
 
 var c_allocator = std.heap.c_allocator;
