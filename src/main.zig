@@ -9,7 +9,8 @@ const glfw = @cImport({
 const glad = @import("./glad.zig");
 
 extern fn errorCallback(err: c_int, description: [*c]const u8) void {
-    std.debug.panic("GLFW error ({}): {}\n", err, description);
+    var message: [*:0]const u8 = description;
+    std.debug.panic("GLFW error ({}): {s}\n", .{ err, message });
 }
 
 extern fn handleKey(
@@ -44,25 +45,25 @@ pub fn main() anyerror!void {
     // glfw.glfwWindowHint(glfw.GLFW_RESIZABLE, glad.GL_FALSE);
 
     var window = glfw.glfwCreateWindow(1280, 720, "MView", null, null) orelse {
-        std.debug.panic("unable to create window\n");
+        std.debug.panic("unable to create window\n", .{});
     };
     defer glfw.glfwDestroyWindow(window);
 
     glfw.glfwMakeContextCurrent(window);
     const loaded = glad.gladLoadGLLoader(glfw.glfwGetProcAddress);
-    std.debug.warn("loaded: {}\n", loaded);
+    std.debug.warn("loaded: {}\n", .{loaded});
     glfw.glfwSwapInterval(1);
 
     const gl_version: [*:0]const u8 = glfw.glGetString(glfw.GL_VERSION);
     const gl_vendor: [*:0]const u8 = glfw.glGetString(glfw.GL_VENDOR);
-    std.debug.warn("GL version: {s}\n", gl_version);
-    std.debug.warn("GL vendor: {s}\n", gl_vendor);
+    std.debug.warn("GL version: {s}\n", .{gl_version});
+    std.debug.warn("GL vendor: {s}\n", .{gl_vendor});
 
     _ = glfw.glfwSetKeyCallback(window, handleKey);
     var width: c_int = undefined;
     var height: c_int = undefined;
     glfw.glfwGetFramebufferSize(window, &width, &height);
-    std.debug.warn("viewport: {}x{}\n", width, height);
+    std.debug.warn("viewport: {}x{}\n", .{ width, height });
 
     var vertices = [_]f32{ -0.5, -0.5, 0.5, 0.5, 0.5, -0.5 };
     var vertex_buffer: glad.GLuint = undefined;
@@ -72,7 +73,7 @@ pub fn main() anyerror!void {
     printGlError(false, "vertex bindbuffer", true);
     glad.glBufferData(
         glad.GL_ARRAY_BUFFER,
-        @sizeOf(f32) * 6,
+        @sizeOf(f32) * vertices.len,
         &vertices,
         glad.GL_STATIC_DRAW,
     );
@@ -104,7 +105,7 @@ pub fn main() anyerror!void {
     defer glad.glDeleteProgram(shader);
 
     var gl_error: c_uint = glad.glGetError();
-    std.debug.warn("gl_error before loop: {}\n", gl_error);
+    std.debug.warn("gl_error before loop: {}\n", .{gl_error});
 
     while (glfw.glfwWindowShouldClose(window) == glad.GL_FALSE) {
         glad.glClear(glad.GL_COLOR_BUFFER_BIT);
@@ -128,19 +129,19 @@ fn printGlError(
     const is_end = mem.eql(u8, label, "end");
     if (!is_end) {
         if (gl_error != glad.GL_NO_ERROR) {
-            std.debug.warn("{} is end?: {}", label, is_end);
-            std.debug.warn("\n\t");
+            std.debug.warn("{} is end?: {}", .{ label, is_end });
+            std.debug.warn("\n\t", .{});
         } else if (warn_on_no_error) {
-            std.debug.warn("{}: no error\n", label);
+            std.debug.warn("{}: no error\n", .{label});
         }
         switch (gl_error) {
-            glad.GL_INVALID_ENUM => std.debug.warn("GL error: invalid enum\n"),
-            glad.GL_INVALID_VALUE => std.debug.warn("GL error: invalid value\n"),
-            glad.GL_INVALID_OPERATION => std.debug.warn("GL error: invalid operation\n"),
-            glad.GL_INVALID_FRAMEBUFFER_OPERATION => std.debug.warn("GL error: invalid fb op\n"),
-            glad.GL_OUT_OF_MEMORY => std.debug.warn("GL error: out of memory\n"),
-            glad.GL_STACK_UNDERFLOW => std.debug.warn("GL error: stack underflow\n"),
-            glad.GL_STACK_OVERFLOW => std.debug.warn("GL error: stack overflow\n"),
+            glad.GL_INVALID_ENUM => std.debug.warn("GL error: invalid enum\n", .{}),
+            glad.GL_INVALID_VALUE => std.debug.warn("GL error: invalid value\n", .{}),
+            glad.GL_INVALID_OPERATION => std.debug.warn("GL error: invalid operation\n", .{}),
+            glad.GL_INVALID_FRAMEBUFFER_OPERATION => std.debug.warn("GL error: invalid fb op\n", .{}),
+            glad.GL_OUT_OF_MEMORY => std.debug.warn("GL error: out of memory\n", .{}),
+            glad.GL_STACK_UNDERFLOW => std.debug.warn("GL error: stack underflow\n", .{}),
+            glad.GL_STACK_OVERFLOW => std.debug.warn("GL error: stack overflow\n", .{}),
             glad.GL_NO_ERROR => {},
             else => unreachable,
         }
@@ -180,7 +181,7 @@ fn compileShader(source: []const u8, kind: glad.GLenum, name: []const u8) !glad.
     const message = try c_allocator.alloc(u8, @intCast(usize, error_size));
     var message_ptr: [*:0]u8 = @ptrCast([*:0]u8, message.ptr);
     glad.glGetShaderInfoLog(id, error_size, &error_size, message_ptr);
-    std.debug.panic("Error compiling {s} shader:\n{}\n", name, message);
+    std.debug.panic("Error compiling {s} shader:\n{}\n", .{ name, message });
 }
 
 var c_allocator = std.heap.c_allocator;
