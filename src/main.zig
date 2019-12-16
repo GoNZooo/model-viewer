@@ -97,7 +97,7 @@ pub fn main() anyerror!void {
     );
     printGlError(false, "vertex attribpointer", true);
 
-    var shader = try createShader(vertex_shader_data, fragment_shader_data);
+    var shader = try createShader(vertex_shader_source, fragment_shader_source);
     printGlError(false, "create shaders", true);
     glad.glUseProgram(shader);
     printGlError(false, "use shaders", true);
@@ -187,7 +187,7 @@ var c_allocator = std.heap.c_allocator;
 
 // \\uniform mat4 MVP;
 // \\
-const vertex_shader_data =
+const vertex_shader_source =
     \\#version 330 core
     \\
     \\layout(location = 0) in vec4 position;
@@ -197,7 +197,7 @@ const vertex_shader_data =
     \\}
 ;
 
-const fragment_shader_data =
+const fragment_shader_source =
     \\#version 330 core
     \\
     \\layout(location = 0) out vec4 color;
