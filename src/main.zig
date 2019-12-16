@@ -35,7 +35,7 @@ pub fn main() anyerror!void {
     defer glfw.glfwTerminate();
 
     glfw.glfwWindowHint(glfw.GLFW_CONTEXT_VERSION_MAJOR, 4);
-    glfw.glfwWindowHint(glfw.GLFW_CONTEXT_VERSION_MINOR, 6);
+    glfw.glfwWindowHint(glfw.GLFW_CONTEXT_VERSION_MINOR, 5);
     // glfw.glfwWindowHint(glfw.GLFW_OPENGL_FORWARD_COMPAT, glad.GL_TRUE);
     glfw.glfwWindowHint(glfw.GLFW_OPENGL_DEBUG_CONTEXT, glad.GL_TRUE);
     glfw.glfwWindowHint(glfw.GLFW_OPENGL_PROFILE, glfw.GLFW_OPENGL_CORE_PROFILE);
