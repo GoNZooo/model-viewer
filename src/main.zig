@@ -171,7 +171,10 @@ fn printGlError(comptime label: []const u8, comptime options: ErrorPrintOptions)
             glad.GL_INVALID_ENUM => std.debug.warn("GL error: invalid enum\n", .{}),
             glad.GL_INVALID_VALUE => std.debug.warn("GL error: invalid value\n", .{}),
             glad.GL_INVALID_OPERATION => std.debug.warn("GL error: invalid operation\n", .{}),
-            glad.GL_INVALID_FRAMEBUFFER_OPERATION => std.debug.warn("GL error: invalid fb op\n", .{}),
+            glad.GL_INVALID_FRAMEBUFFER_OPERATION => std.debug.warn(
+                "GL error: invalid framebuffer op\n",
+                .{},
+            ),
             glad.GL_OUT_OF_MEMORY => std.debug.warn("GL error: out of memory\n", .{}),
             glad.GL_STACK_UNDERFLOW => std.debug.warn("GL error: stack underflow\n", .{}),
             glad.GL_STACK_OVERFLOW => std.debug.warn("GL error: stack overflow\n", .{}),
