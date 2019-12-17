@@ -123,10 +123,6 @@ pub fn main() anyerror!void {
     );
 
     var program = try Program.create(vertex_shader_source, fragment_shader_source);
-    printGlError(
-        "create shaders",
-        ErrorPrintOptions{ .warn_on_no_error = false, .panic_on_error = true },
-    );
     program.use();
     printGlError(
         "use shaders",
