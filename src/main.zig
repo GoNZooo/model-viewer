@@ -68,26 +68,44 @@ pub fn main() anyerror!void {
     var vertices = [_]f32{ -0.5, -0.5, 0.5, 0.5, 0.5, -0.5 };
     var vertex_buffer: glad.GLuint = undefined;
     glad.glGenBuffers(1, &vertex_buffer);
-    printGlError(false, "vertex genbuffer", true);
+    printGlError(
+        "vertex genbuffer",
+        ErrorPrintOptions{ .warn_on_no_error = false, .panic_on_error = true },
+    );
     glad.glBindBuffer(glad.GL_ARRAY_BUFFER, vertex_buffer);
-    printGlError(false, "vertex bindbuffer", true);
+    printGlError(
+        "vertex bindbuffer",
+        ErrorPrintOptions{ .warn_on_no_error = false, .panic_on_error = true },
+    );
     glad.glBufferData(
         glad.GL_ARRAY_BUFFER,
         @sizeOf(f32) * vertices.len,
         &vertices,
         glad.GL_STATIC_DRAW,
     );
-    printGlError(false, "vertex bufferdata", true);
+    printGlError(
+        "vertex bufferdata",
+        ErrorPrintOptions{ .warn_on_no_error = false, .panic_on_error = true },
+    );
 
     var vertex_array_object: glad.GLuint = undefined;
     glad.glGenVertexArrays(1, &vertex_array_object);
-    printGlError(false, "gen vertex array object", true);
+    printGlError(
+        "gen vertex array object",
+        ErrorPrintOptions{ .warn_on_no_error = false, .panic_on_error = true },
+    );
     glad.glBindVertexArray(vertex_array_object);
-    printGlError(false, "bind vertex array object", true);
+    printGlError(
+        "bind vertex array object",
+        ErrorPrintOptions{ .warn_on_no_error = false, .panic_on_error = true },
+    );
     defer glad.glDeleteVertexArrays(1, &vertex_array_object);
 
     glad.glEnableVertexAttribArray(0);
-    printGlError(false, "vertex enable attrib array", true);
+    printGlError(
+        "vertex enable attrib array",
+        ErrorPrintOptions{ .warn_on_no_error = false, .panic_on_error = true },
+    );
     glad.glVertexAttribPointer(
         0,
         2,
@@ -96,12 +114,21 @@ pub fn main() anyerror!void {
         2 * @sizeOf(f32),
         null,
     );
-    printGlError(false, "vertex attribpointer", true);
+    printGlError(
+        "vertex attribpointer",
+        ErrorPrintOptions{ .warn_on_no_error = false, .panic_on_error = true },
+    );
 
     var shader = try createShader(vertex_shader_source, fragment_shader_source);
-    printGlError(false, "create shaders", true);
+    printGlError(
+        "create shaders",
+        ErrorPrintOptions{ .warn_on_no_error = false, .panic_on_error = true },
+    );
     glad.glUseProgram(shader);
-    printGlError(false, "use shaders", true);
+    printGlError(
+        "use shaders",
+        ErrorPrintOptions{ .warn_on_no_error = false, .panic_on_error = true },
+    );
     defer glad.glDeleteProgram(shader);
 
     var gl_error: c_uint = glad.glGetError();
@@ -109,10 +136,16 @@ pub fn main() anyerror!void {
 
     while (glfw.glfwWindowShouldClose(window) == glad.GL_FALSE) {
         glad.glClear(glad.GL_COLOR_BUFFER_BIT);
-        printGlError(false, "clear", true);
+        printGlError(
+            "clear",
+            ErrorPrintOptions{ .warn_on_no_error = false, .panic_on_error = true },
+        );
 
         glad.glDrawArrays(glad.GL_TRIANGLES, 0, 3);
-        printGlError(false, "drawArrays", true);
+        printGlError(
+            "drawArrays",
+            ErrorPrintOptions{ .warn_on_no_error = false, .panic_on_error = true },
+        );
 
         glfw.glfwSwapBuffers(window);
 
@@ -120,18 +153,19 @@ pub fn main() anyerror!void {
     }
 }
 
-fn printGlError(
-    comptime warn_on_no_error: bool,
-    comptime label: []const u8,
-    comptime panic_on_error: bool,
-) void {
+const ErrorPrintOptions = struct {
+    warn_on_no_error: bool,
+    panic_on_error: bool,
+};
+
+fn printGlError(comptime label: []const u8, comptime options: ErrorPrintOptions) void {
     var gl_error = glad.glGetError();
     const is_end = mem.eql(u8, label, "end");
     if (!is_end) {
         if (gl_error != glad.GL_NO_ERROR) {
             std.debug.warn("{} is end?: {}", .{ label, is_end });
             std.debug.warn("\n\t", .{});
-        } else if (warn_on_no_error) {
+        } else if (options.warn_on_no_error) {
             std.debug.warn("{}: no error\n", .{label});
         }
         switch (gl_error) {
@@ -145,7 +179,7 @@ fn printGlError(
             glad.GL_NO_ERROR => {},
             else => unreachable,
         }
-        if (gl_error != glad.GL_NO_ERROR and panic_on_error) std.process.exit(1);
+        if (gl_error != glad.GL_NO_ERROR and options.panic_on_error) std.process.exit(1);
     }
 }
 
