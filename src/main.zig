@@ -2,6 +2,8 @@ const std = @import("std");
 const obj = @import("./obj.zig");
 const mem = std.mem;
 
+const Program = @import("./program.zig").Program;
+
 const glfw = @cImport({
     @cInclude("GLFW/glfw3.h");
 });
@@ -66,6 +68,7 @@ pub fn main() anyerror!void {
     std.debug.warn("viewport: {}x{}\n", .{ width, height });
 
     var vertices = [_]f32{ -0.5, -0.5, 0.5, 0.5, 0.5, -0.5 };
+
     var vertex_buffer: glad.GLuint = undefined;
     glad.glGenBuffers(1, &vertex_buffer);
     printGlError(
@@ -119,17 +122,17 @@ pub fn main() anyerror!void {
         ErrorPrintOptions{ .warn_on_no_error = false, .panic_on_error = true },
     );
 
-    var shader = try createShader(vertex_shader_source, fragment_shader_source);
+    var program = try Program.create(vertex_shader_source, fragment_shader_source);
     printGlError(
         "create shaders",
         ErrorPrintOptions{ .warn_on_no_error = false, .panic_on_error = true },
     );
-    glad.glUseProgram(shader);
+    program.use();
     printGlError(
         "use shaders",
         ErrorPrintOptions{ .warn_on_no_error = false, .panic_on_error = true },
     );
-    defer glad.glDeleteProgram(shader);
+    defer program.delete();
 
     var gl_error: c_uint = glad.glGetError();
     std.debug.warn("gl_error before loop: {}\n", .{gl_error});
@@ -182,43 +185,6 @@ fn printGlError(comptime label: []const u8, comptime options: ErrorPrintOptions)
         if (gl_error != glad.GL_NO_ERROR and options.panic_on_error) std.process.exit(1);
     }
 }
-
-fn createShader(vertex_shader: []const u8, fragment_shader: []const u8) !glad.GLuint {
-    var program = glad.glCreateProgram();
-    var vs = try compileShader(vertex_shader, glad.GL_VERTEX_SHADER, "vertex");
-    var fs = try compileShader(fragment_shader, glad.GL_FRAGMENT_SHADER, "fragment");
-
-    glad.glAttachShader(program, vs);
-    glad.glAttachShader(program, fs);
-    glad.glLinkProgram(program);
-    glad.glValidateProgram(program);
-
-    glad.glDeleteShader(vs);
-    glad.glDeleteShader(fs);
-
-    return program;
-}
-
-fn compileShader(source: []const u8, kind: glad.GLenum, name: []const u8) !glad.GLuint {
-    const id = glad.glCreateShader(kind);
-    const source_ptr: ?[*]const u8 = source.ptr;
-    glad.glShaderSource(id, 1, &source_ptr, null);
-    glad.glCompileShader(id);
-
-    var ok: glad.GLint = undefined;
-    glad.glGetShaderiv(id, glad.GL_COMPILE_STATUS, &ok);
-    if (ok != 0) return id;
-
-    var error_size: glad.GLint = undefined;
-    glad.glGetShaderiv(id, glad.GL_INFO_LOG_LENGTH, &error_size);
-
-    const message = try c_allocator.alloc(u8, @intCast(usize, error_size));
-    var message_ptr: [*:0]u8 = @ptrCast([*:0]u8, message.ptr);
-    glad.glGetShaderInfoLog(id, error_size, &error_size, message_ptr);
-    std.debug.panic("Error compiling {s} shader:\n{}\n", .{ name, message });
-}
-
-var c_allocator = std.heap.c_allocator;
 
 // \\uniform mat4 MVP;
 // \\
