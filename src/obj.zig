@@ -1,3 +1,6 @@
+const std = @import("std");
+const mem = std.mem;
+
 pub const rough_sphere_on_cube_data = @embedFile("../res/obj/rough-sphere-on-cube.obj");
 
 pub const rough_sphere_on_cube = parseObj(rough_sphere_on_cube_data);
@@ -17,6 +20,6 @@ pub const Obj = struct {
     indices: []Index3,
 };
 
-pub fn parseObj(data: []const u8) Obj {
+pub fn parseObj(allocator: *mem.Allocator, data: []const u8) Obj {
     return Obj{ .vertices = &[_]Vertex(3, f32){}, .indices = &[_]Index3{} };
 }
