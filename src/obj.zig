@@ -22,5 +22,9 @@ pub const Obj = struct {
 };
 
 pub fn parseObj(allocator: *mem.Allocator, data: []const u8) Obj {
-    return Obj{ .vertices = &[_]Vertex(3, f32){}, .indices = &[_]Index3{} };
+    return Obj{
+        .vertices = &[_]Vertex(3, f32){},
+        .indices = &[_]Index3{},
+        .normals = &[_]Vertex(3, f32){},
+    };
 }
