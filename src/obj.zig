@@ -18,6 +18,7 @@ pub const Index3 = struct {
 pub const Obj = struct {
     vertices: []Vertex(3, f32),
     indices: []Index3,
+    normals: []Vertex(3, f32),
 };
 
 pub fn parseObj(allocator: *mem.Allocator, data: []const u8) Obj {
