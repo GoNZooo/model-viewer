@@ -52,7 +52,6 @@ pub const Context = struct {
             &device_extensions,
         );
         if (physical_device == null) return error.NoPhysicalDevice;
-        std.debug.warn("device_extensions: {}\n", .{device_extensions});
 
         var queue: c.VkQueue = undefined;
         var present_queue: c.VkQueue = undefined;
