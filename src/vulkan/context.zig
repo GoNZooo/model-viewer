@@ -14,6 +14,12 @@ const QueueFamilyIndices = struct {
     present_family: ?u32,
 };
 
+const SwapChainSupportDetails = struct {
+    capabilities: c.VkSurfaceCapabilitiesKHR,
+    formats: []c.VkSurfaceFormatKHR,
+    present_modes: []c.VkPresentModeKHR,
+};
+
 pub const Context = struct {
     const Self = @This();
 
@@ -303,11 +309,18 @@ fn isDeviceSuitable(
         c.VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU;
     const has_graphics_family = queue_families.graphics_family != null;
     const has_present_family = queue_families.present_family != null;
-    const has_device_extension_support = hasDeviceExtensionSupport(
+    const has_device_extension_support = try hasDeviceExtensionSupport(
         allocator,
         device,
         device_extensions,
     );
+
+    var swap_chain_adequate = false;
+    if (has_device_extension_support) {
+        const swap_chain_support = try querySwapChainSupport(allocator, device, surface);
+        swap_chain_adequate = swap_chain_support.formats.len != 0 and
+            swap_chain_support.present_modes.len != 0;
+    }
 
     return device_is_discrete_gpu and has_graphics_family and has_present_family and
         has_device_extension_support;
@@ -352,6 +365,36 @@ fn hasExtension(extension_name: []const u8, extension_properties: []c.VkExtensio
     }
 
     return false;
+}
+
+fn querySwapChainSupport(
+    allocator: *mem.Allocator,
+    device: c.VkPhysicalDevice,
+    surface: c.VkSurfaceKHR,
+) !SwapChainSupportDetails {
+    var details: SwapChainSupportDetails = undefined;
+    _ = c.vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &details.capabilities);
+
+    var format_count: u32 = undefined;
+    _ = c.vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &format_count, null);
+    var formats = try allocator.alloc(c.VkSurfaceFormatKHR, format_count);
+    errdefer allocator.free(formats);
+    _ = c.vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &format_count, formats.ptr);
+
+    var present_mode_count: u32 = undefined;
+    _ = c.vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &present_mode_count, null);
+    var present_modes = try allocator.alloc(c.VkPresentModeKHR, present_mode_count);
+    _ = c.vkGetPhysicalDeviceSurfacePresentModesKHR(
+        device,
+        surface,
+        &present_mode_count,
+        present_modes.ptr,
+    );
+
+    details.formats = formats;
+    details.present_modes = present_modes;
+
+    return details;
 }
 
 const khronos_validation = "VK_LAYER_KHRONOS_validation";
