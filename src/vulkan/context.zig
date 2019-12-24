@@ -397,6 +397,49 @@ fn querySwapChainSupport(
     return details;
 }
 
+fn chooseSwapSurfaceFormat(available_formats: []c.VkSurfaceFormatKHR) c.VkSurfaceFormatKHR {
+    std.debug.assert(available_formats.len > 0);
+    for (available_formats) |f| {
+        if (f.format == c.VK_FORMATSB8G8R8A8_UNORM and
+            f.colorSpace == c.VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
+        {
+            return f;
+        }
+    }
+
+    return available_formats[0];
+}
+
+fn chooseSwapPresentMode(available_present_modes: []c.VkPresentModeKHR) c.VkPresentModeKHR {
+    std.debug.assert(available_present_modes.len > 0);
+
+    for (available_present_modes) |pm| {
+        if (pm == c.VK_PRESENT_MODE_MAILBOX_KHR) return pm;
+    }
+
+    return c.VK_PRESENT_MODE_FIFO_KHR;
+}
+
+fn chooseSwapExtent(capabilities: c.VkSurfaceCapabilitiesKHR) c.VkExtent2D {
+    if (capabilities.currentExtent.width != std.math.maxInt(u32)) {
+        return capabilities.currentExtent;
+    } else {
+        var actual_extent = c.VkExtent2D{ .width = 1280, .height = 720 };
+
+        actual_extent.width = std.math.max(
+            capabilities.minImageExtent.width,
+            std.math.min(capabilities.maxImageExtent.width),
+        );
+
+        actual_extent.height = std.math.max(
+            capabilities.minImageExtent.height,
+            std.math.min(capabilities.maxImageExtent.height),
+        );
+
+        return actual_extent;
+    }
+}
+
 const khronos_validation = "VK_LAYER_KHRONOS_validation";
 
 const validation_layers = [_][*:0]const u8{khronos_validation};
