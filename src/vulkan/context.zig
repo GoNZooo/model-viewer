@@ -32,6 +32,7 @@ pub const Context = struct {
     queue: c.VkQueue,
     present_queue: c.VkQueue,
     surface: c.VkSurfaceKHR,
+    swap_chain_support_details: SwapChainSupportDetails,
 
     _allocator: *mem.Allocator,
 
@@ -51,12 +52,17 @@ pub const Context = struct {
             .available = undefined,
             .extensions_start = undefined,
         };
+
+        var swap_chain_support_details: SwapChainSupportDetails = undefined;
+
         var physical_device = try pickPhysicalDevice(
             allocator,
             instance,
             surface,
+            &swap_chain_support_details,
             &device_extensions,
         );
+        std.debug.warn("scsd: {}\n", .{swap_chain_support_details});
         if (physical_device == null) return error.NoPhysicalDevice;
 
         var queue: c.VkQueue = undefined;
@@ -81,6 +87,7 @@ pub const Context = struct {
             .queue = queue,
             .present_queue = present_queue,
             .surface = surface,
+            .swap_chain_support_details = swap_chain_support_details,
             ._allocator = allocator,
         };
     }
@@ -265,6 +272,7 @@ pub fn pickPhysicalDevice(
     allocator: *mem.Allocator,
     instance: c.VkInstance,
     surface: c.VkSurfaceKHR,
+    swap_chain_support_details: *SwapChainSupportDetails,
     device_extensions: *ExtensionInfo,
 ) !c.VkPhysicalDevice {
     var physical_device: c.VkPhysicalDevice = null;
@@ -277,7 +285,13 @@ pub fn pickPhysicalDevice(
     _ = c.vkEnumeratePhysicalDevices(instance, &device_count, physical_devices.ptr);
 
     for (physical_devices) |device| {
-        if (try isDeviceSuitable(allocator, device, surface, device_extensions)) {
+        if (try isDeviceSuitable(
+            allocator,
+            device,
+            surface,
+            swap_chain_support_details,
+            device_extensions,
+        )) {
             physical_device = device;
             break;
         }
@@ -296,6 +310,7 @@ fn isDeviceSuitable(
     allocator: *mem.Allocator,
     device: c.VkPhysicalDevice,
     surface: c.VkSurfaceKHR,
+    swap_chain_support_details: *SwapChainSupportDetails,
     device_extensions: *ExtensionInfo,
 ) !bool {
     var device_properties: c.VkPhysicalDeviceProperties = undefined;
@@ -317,9 +332,9 @@ fn isDeviceSuitable(
 
     var swap_chain_adequate = false;
     if (has_device_extension_support) {
-        const swap_chain_support = try querySwapChainSupport(allocator, device, surface);
-        swap_chain_adequate = swap_chain_support.formats.len != 0 and
-            swap_chain_support.present_modes.len != 0;
+        swap_chain_support_details.* = try querySwapChainSupport(allocator, device, surface);
+        swap_chain_adequate = swap_chain_support_details.formats.len != 0 and
+            swap_chain_support_details.present_modes.len != 0;
     }
 
     return device_is_discrete_gpu and has_graphics_family and has_present_family and
@@ -394,13 +409,17 @@ fn querySwapChainSupport(
     details.formats = formats;
     details.present_modes = present_modes;
 
+    const chosen_format = chooseSwapSurfaceFormat(formats);
+    const chosen_present_mode = chooseSwapPresentMode(present_modes);
+    const swap_extent = chooseSwapExtent(details.capabilities);
+
     return details;
 }
 
 fn chooseSwapSurfaceFormat(available_formats: []c.VkSurfaceFormatKHR) c.VkSurfaceFormatKHR {
     std.debug.assert(available_formats.len > 0);
     for (available_formats) |f| {
-        if (f.format == c.VK_FORMATSB8G8R8A8_UNORM and
+        if (f.format == c.VK_FORMAT_B8G8R8A8_UNORM and
             f.colorSpace == c.VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
         {
             return f;
@@ -424,16 +443,16 @@ fn chooseSwapExtent(capabilities: c.VkSurfaceCapabilitiesKHR) c.VkExtent2D {
     if (capabilities.currentExtent.width != std.math.maxInt(u32)) {
         return capabilities.currentExtent;
     } else {
-        var actual_extent = c.VkExtent2D{ .width = 1280, .height = 720 };
+        var actual_extent = c.VkExtent2D{ .width = chosen_width, .height = chosen_height };
 
         actual_extent.width = std.math.max(
             capabilities.minImageExtent.width,
-            std.math.min(capabilities.maxImageExtent.width),
+            std.math.min(capabilities.maxImageExtent.width, actual_extent.width),
         );
 
         actual_extent.height = std.math.max(
             capabilities.minImageExtent.height,
-            std.math.min(capabilities.maxImageExtent.height),
+            std.math.min(capabilities.maxImageExtent.height, actual_extent.height),
         );
 
         return actual_extent;
@@ -450,3 +469,6 @@ const required_device_extensions: []const []const u8 = &[_][]const u8{
 const required_device_extensions_c: [*c]const [*c]const u8 = &[_][*c]const u8{
     c.VK_KHR_SWAPCHAIN_EXTENSION_NAME,
 };
+
+const chosen_width: u32 = 1280;
+const chosen_height: u32 = 720;
