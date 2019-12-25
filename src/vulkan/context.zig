@@ -33,6 +33,7 @@ pub const Context = struct {
     present_queue: c.VkQueue,
     surface: c.VkSurfaceKHR,
     swap_chain_support_details: SwapChainSupportDetails,
+    swap_chain: c.VkSwapchainKHR,
 
     _allocator: *mem.Allocator,
 
@@ -55,12 +56,19 @@ pub const Context = struct {
 
         var swap_chain_support_details: SwapChainSupportDetails = undefined;
 
+        var surface_format: c.VkSurfaceFormatKHR = undefined;
+        var present_mode: c.VkPresentModeKHR = undefined;
+        var swap_extent: c.VkExtent2D = undefined;
+
         var physical_device = try pickPhysicalDevice(
             allocator,
             instance,
             surface,
             &swap_chain_support_details,
             &device_extensions,
+            &surface_format,
+            &present_mode,
+            &swap_extent,
         );
         std.debug.warn("scsd: {}\n", .{swap_chain_support_details});
         if (physical_device == null) return error.NoPhysicalDevice;
@@ -77,6 +85,18 @@ pub const Context = struct {
         );
         if (logical_device == null) return error.NoLogicalDevice;
 
+        std.debug.warn("logical_device: {}\n", .{logical_device.?});
+        var swap_chain = try createSwapChain(
+            allocator,
+            swap_chain_support_details,
+            surface_format,
+            present_mode,
+            swap_extent,
+            surface,
+            physical_device,
+            logical_device,
+        );
+
         return Self{
             .instance = instance,
             .physical_device = physical_device,
@@ -88,6 +108,7 @@ pub const Context = struct {
             .present_queue = present_queue,
             .surface = surface,
             .swap_chain_support_details = swap_chain_support_details,
+            .swap_chain = swap_chain,
             ._allocator = allocator,
         };
     }
@@ -274,6 +295,9 @@ pub fn pickPhysicalDevice(
     surface: c.VkSurfaceKHR,
     swap_chain_support_details: *SwapChainSupportDetails,
     device_extensions: *ExtensionInfo,
+    surface_format: *c.VkSurfaceFormatKHR,
+    present_mode: *c.VkPresentModeKHR,
+    swap_extent: *c.VkExtent2D,
 ) !c.VkPhysicalDevice {
     var physical_device: c.VkPhysicalDevice = null;
     var device_count: u32 = 0;
@@ -291,6 +315,9 @@ pub fn pickPhysicalDevice(
             surface,
             swap_chain_support_details,
             device_extensions,
+            surface_format,
+            present_mode,
+            swap_extent,
         )) {
             physical_device = device;
             break;
@@ -312,6 +339,9 @@ fn isDeviceSuitable(
     surface: c.VkSurfaceKHR,
     swap_chain_support_details: *SwapChainSupportDetails,
     device_extensions: *ExtensionInfo,
+    surface_format: *c.VkSurfaceFormatKHR,
+    present_mode: *c.VkPresentModeKHR,
+    swap_extent: *c.VkExtent2D,
 ) !bool {
     var device_properties: c.VkPhysicalDeviceProperties = undefined;
     var device_features: c.VkPhysicalDeviceFeatures = undefined;
@@ -332,7 +362,14 @@ fn isDeviceSuitable(
 
     var swap_chain_adequate = false;
     if (has_device_extension_support) {
-        swap_chain_support_details.* = try querySwapChainSupport(allocator, device, surface);
+        swap_chain_support_details.* = try querySwapChainSupport(
+            allocator,
+            device,
+            surface,
+            surface_format,
+            present_mode,
+            swap_extent,
+        );
         swap_chain_adequate = swap_chain_support_details.formats.len != 0 and
             swap_chain_support_details.present_modes.len != 0;
     }
@@ -386,6 +423,9 @@ fn querySwapChainSupport(
     allocator: *mem.Allocator,
     device: c.VkPhysicalDevice,
     surface: c.VkSurfaceKHR,
+    surface_format: *c.VkSurfaceFormatKHR,
+    present_mode: *c.VkPresentModeKHR,
+    swap_extent: *c.VkExtent2D,
 ) !SwapChainSupportDetails {
     var details: SwapChainSupportDetails = undefined;
     _ = c.vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &details.capabilities);
@@ -409,9 +449,9 @@ fn querySwapChainSupport(
     details.formats = formats;
     details.present_modes = present_modes;
 
-    const chosen_format = chooseSwapSurfaceFormat(formats);
-    const chosen_present_mode = chooseSwapPresentMode(present_modes);
-    const swap_extent = chooseSwapExtent(details.capabilities);
+    surface_format.* = chooseSwapSurfaceFormat(formats);
+    present_mode.* = chooseSwapPresentMode(present_modes);
+    swap_extent.* = chooseSwapExtent(details.capabilities);
 
     return details;
 }
@@ -457,6 +497,64 @@ fn chooseSwapExtent(capabilities: c.VkSurfaceCapabilitiesKHR) c.VkExtent2D {
 
         return actual_extent;
     }
+}
+
+fn createSwapChain(
+    allocator: *mem.Allocator,
+    swap_chain_support_details: SwapChainSupportDetails,
+    surface_format: c.VkSurfaceFormatKHR,
+    present_mode: c.VkPresentModeKHR,
+    swap_extent: c.VkExtent2D,
+    surface: c.VkSurfaceKHR,
+    physical_device: c.VkPhysicalDevice,
+    logical_device: c.VkDevice,
+) !c.VkSwapchainKHR {
+    var image_count = swap_chain_support_details.capabilities.minImageCount + 1;
+
+    if (swap_chain_support_details.capabilities.maxImageCount > 0 and
+        image_count > swap_chain_support_details.capabilities.maxImageCount)
+    {
+        image_count = swap_chain_support_details.capabilities.maxImageCount;
+    }
+
+    var create_info = zeroInit(c.VkSwapchainCreateInfoKHR);
+
+    const queue_families = try findQueueFamilies(allocator, physical_device, surface);
+    var queue_indices = [_]u32{ queue_families.graphics_family.?, queue_families.present_family.? };
+
+    create_info.sType = c.VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+    create_info.surface = surface;
+    create_info.minImageCount = image_count;
+    create_info.imageFormat = surface_format.format;
+    create_info.imageColorSpace = surface_format.colorSpace;
+    create_info.imageExtent = swap_extent;
+    create_info.imageArrayLayers = 1;
+    create_info.imageUsage = @enumToInt(c.VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+
+    if (queue_families.graphics_family.? != queue_families.present_family.?) {
+        std.debug.warn("graphics & present family different\n", .{});
+        create_info.imageSharingMode = c.VK_SHARING_MODE_CONCURRENT;
+        create_info.queueFamilyIndexCount = 2;
+        create_info.pQueueFamilyIndices = &queue_indices[0];
+    } else {
+        std.debug.warn("graphics & present family NOT different\n", .{});
+        create_info.imageSharingMode = c.VK_SHARING_MODE_EXCLUSIVE;
+        // create_info.queueFamilyIndexCount = 0;
+        // create_info.pQueueFamilyIndices = null;
+    }
+
+    create_info.preTransform = swap_chain_support_details.capabilities.currentTransform;
+    create_info.compositeAlpha = c.VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+    create_info.presentMode = present_mode;
+    create_info.clipped = c.VK_TRUE;
+    // create_info.oldSwapchain = null;
+
+    var swap_chain: c.VkSwapchainKHR = undefined;
+    if (c.vkCreateSwapchainKHR(logical_device, &create_info, null, &swap_chain) != c.VK_SUCCESS) {
+        return error.UnableToCreateSwapChain;
+    }
+
+    return swap_chain;
 }
 
 const khronos_validation = "VK_LAYER_KHRONOS_validation";
