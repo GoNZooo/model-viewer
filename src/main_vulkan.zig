@@ -53,7 +53,7 @@ pub fn main() anyerror!void {
 
     var context = try Context.init(heap.page_allocator, window);
     defer context.deinit();
-    std.debug.warn("context: {}\n", .{context});
+    // std.debug.warn("context: {}\n", .{context});
     std.debug.warn("required extensions: {}\n", .{context.extensions.required.len});
     for (context.extensions.required) |extension| {
         std.debug.warn("\t{s}\n", .{extension});

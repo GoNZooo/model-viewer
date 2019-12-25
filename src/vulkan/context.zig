@@ -34,6 +34,9 @@ pub const Context = struct {
     surface: c.VkSurfaceKHR,
     swap_chain_support_details: SwapChainSupportDetails,
     swap_chain: c.VkSwapchainKHR,
+    swap_chain_images: []c.VkImage,
+    surface_format: c.VkSurfaceFormatKHR,
+    swap_extent: c.VkExtent2D,
 
     _allocator: *mem.Allocator,
 
@@ -70,7 +73,6 @@ pub const Context = struct {
             &present_mode,
             &swap_extent,
         );
-        std.debug.warn("scsd: {}\n", .{swap_chain_support_details});
         if (physical_device == null) return error.NoPhysicalDevice;
 
         var queue: c.VkQueue = undefined;
@@ -85,7 +87,6 @@ pub const Context = struct {
         );
         if (logical_device == null) return error.NoLogicalDevice;
 
-        std.debug.warn("logical_device: {}\n", .{logical_device.?});
         var swap_chain = try createSwapChain(
             allocator,
             swap_chain_support_details,
@@ -96,6 +97,10 @@ pub const Context = struct {
             physical_device,
             logical_device,
         );
+        // This crashes compilation, "broken LLVM module found: Duplicate integer as switch case"
+        // std.debug.warn("surface_format: {}\n", .{surface_format});
+
+        var swap_chain_images = try getSwapChainImages(allocator, logical_device, swap_chain);
 
         return Self{
             .instance = instance,
@@ -109,6 +114,9 @@ pub const Context = struct {
             .surface = surface,
             .swap_chain_support_details = swap_chain_support_details,
             .swap_chain = swap_chain,
+            .swap_chain_images = swap_chain_images,
+            .surface_format = surface_format,
+            .swap_extent = swap_extent,
             ._allocator = allocator,
         };
     }
@@ -555,6 +563,19 @@ fn createSwapChain(
     }
 
     return swap_chain;
+}
+
+fn getSwapChainImages(
+    allocator: *mem.Allocator,
+    logical_device: c.VkDevice,
+    swap_chain: c.VkSwapchainKHR,
+) ![]c.VkImage {
+    var image_count: u32 = undefined;
+    _ = c.vkGetSwapchainImagesKHR(logical_device, swap_chain, &image_count, null);
+    var images = try allocator.alloc(c.VkImage, image_count);
+    _ = c.vkGetSwapchainImagesKHR(logical_device, swap_chain, &image_count, images.ptr);
+
+    return images;
 }
 
 const khronos_validation = "VK_LAYER_KHRONOS_validation";
