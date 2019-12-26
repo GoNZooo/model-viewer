@@ -7,6 +7,12 @@ pub const ExtensionInfo = struct {
     required: []const []const u8,
     available: []c.VkExtensionProperties,
     extensions_start: [*c]const [*c]const u8,
+    _allocator: *mem.Allocator,
+
+    fn deinit(self: *ExtensionInfo) void {
+        self._allocator.free(self.required);
+        self._allocator.free(self.available);
+    }
 };
 
 const QueueFamilyIndices = struct {
@@ -39,6 +45,7 @@ pub const Context = struct {
     swap_extent: c.VkExtent2D,
     swap_chain_image_format: c.VkFormat,
     image_views: []c.VkImageView,
+    queue_create_infos: []c.VkDeviceQueueCreateInfo,
 
     _allocator: *mem.Allocator,
 
@@ -57,6 +64,7 @@ pub const Context = struct {
             .required = required_device_extensions,
             .available = undefined,
             .extensions_start = undefined,
+            ._allocator = allocator,
         };
 
         var swap_chain_support_details: SwapChainSupportDetails = undefined;
@@ -79,6 +87,7 @@ pub const Context = struct {
 
         var queue: c.VkQueue = undefined;
         var present_queue: c.VkQueue = undefined;
+        var queue_create_infos: []c.VkDeviceQueueCreateInfo = undefined;
         var logical_device = try createLogicalDevice(
             allocator,
             physical_device,
@@ -130,6 +139,7 @@ pub const Context = struct {
             .swap_extent = swap_extent,
             .swap_chain_image_format = swap_chain_image_format,
             .image_views = image_views,
+            .queue_create_infos = queue_create_infos,
             ._allocator = allocator,
         };
     }
@@ -142,7 +152,10 @@ pub const Context = struct {
         c.vkDestroySurfaceKHR(self.instance, self.surface, null);
         c.vkDestroyInstance(self.instance, null);
         self._allocator.free(self.image_views);
+        self._allocator.free(self.swap_chain_images);
         self._allocator.free(self.layers);
+        self._allocator.free(self.queue_create_infos);
+        self.extensions.deinit();
     }
 };
 
@@ -184,6 +197,7 @@ fn initVulkan(
 fn make_version(major: u32, minor: u32, patch: u32) u32 {
     return (major << 22) | (minor << 12) | patch;
 }
+
 pub fn getExtensions(allocator: *mem.Allocator) !ExtensionInfo {
     var required_extensions_count: u32 = undefined;
     var vulkan_extension_count: u32 = undefined;
@@ -217,6 +231,7 @@ pub fn getExtensions(allocator: *mem.Allocator) !ExtensionInfo {
         .required = required_extensions,
         .available = vulkan_extensions,
         .extensions_start = glfw_extensions_return,
+        ._allocator = allocator,
     };
 }
 
@@ -239,6 +254,7 @@ pub fn findQueueFamilies(
     var queue_family_count: u32 = 0;
     _ = c.vkGetPhysicalDeviceQueueFamilyProperties(device, &queue_family_count, null);
     var queue_families = try allocator.alloc(c.VkQueueFamilyProperties, queue_family_count);
+    defer allocator.free(queue_families);
     _ = c.vkGetPhysicalDeviceQueueFamilyProperties(device, &queue_family_count, queue_families.ptr);
     var present_support: c.VkBool32 = undefined;
 
@@ -278,6 +294,7 @@ pub fn createLogicalDevice(
     };
     var queue_priority: f32 = 1.0;
     var queue_create_infos = try allocator.alloc(c.VkDeviceQueueCreateInfo, queue_families.len);
+    defer allocator.free(queue_create_infos);
     for (queue_families) |qf, i| {
         queue_create_infos[i] = c.VkDeviceQueueCreateInfo{
             .sType = c.VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
@@ -332,6 +349,7 @@ pub fn pickPhysicalDevice(
     if (device_count == 0) return error.NoPhysicalDevices;
 
     var physical_devices = try allocator.alloc(c.VkPhysicalDevice, device_count);
+    defer allocator.free(physical_devices);
     _ = c.vkEnumeratePhysicalDevices(instance, &device_count, physical_devices.ptr);
 
     for (physical_devices) |device| {
