@@ -37,6 +37,8 @@ pub const Context = struct {
     swap_chain_images: []c.VkImage,
     surface_format: c.VkSurfaceFormatKHR,
     swap_extent: c.VkExtent2D,
+    swap_chain_image_format: c.VkFormat,
+    image_views: []c.VkImageView,
 
     _allocator: *mem.Allocator,
 
@@ -87,6 +89,8 @@ pub const Context = struct {
         );
         if (logical_device == null) return error.NoLogicalDevice;
 
+        var swap_chain_image_format: c.VkFormat = undefined;
+
         var swap_chain = try createSwapChain(
             allocator,
             swap_chain_support_details,
@@ -96,11 +100,18 @@ pub const Context = struct {
             surface,
             physical_device,
             logical_device,
+            &swap_chain_image_format,
         );
         // This crashes compilation, "broken LLVM module found: Duplicate integer as switch case"
         // std.debug.warn("surface_format: {}\n", .{surface_format});
 
         var swap_chain_images = try getSwapChainImages(allocator, logical_device, swap_chain);
+        var image_views = try createImageViews(
+            allocator,
+            swap_chain_images,
+            swap_chain_image_format,
+            logical_device,
+        );
 
         return Self{
             .instance = instance,
@@ -117,14 +128,21 @@ pub const Context = struct {
             .swap_chain_images = swap_chain_images,
             .surface_format = surface_format,
             .swap_extent = swap_extent,
+            .swap_chain_image_format = swap_chain_image_format,
+            .image_views = image_views,
             ._allocator = allocator,
         };
     }
 
     pub fn deinit(self: *Self) void {
+        for (self.image_views) |view| {
+            c.vkDestroyImageView(self.logical_device, view, null);
+        }
         c.vkDestroyDevice(self.logical_device, null);
         c.vkDestroySurfaceKHR(self.instance, self.surface, null);
         c.vkDestroyInstance(self.instance, null);
+        self._allocator.free(self.image_views);
+        self._allocator.free(self.layers);
     }
 };
 
@@ -516,6 +534,7 @@ fn createSwapChain(
     surface: c.VkSurfaceKHR,
     physical_device: c.VkPhysicalDevice,
     logical_device: c.VkDevice,
+    swap_chain_image_format: *c.VkFormat,
 ) !c.VkSwapchainKHR {
     var image_count = swap_chain_support_details.capabilities.minImageCount + 1;
 
@@ -538,6 +557,8 @@ fn createSwapChain(
     create_info.imageExtent = swap_extent;
     create_info.imageArrayLayers = 1;
     create_info.imageUsage = @enumToInt(c.VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+
+    swap_chain_image_format.* = surface_format.format;
 
     if (queue_families.graphics_family.? != queue_families.present_family.?) {
         std.debug.warn("graphics & present family different\n", .{});
@@ -576,6 +597,46 @@ fn getSwapChainImages(
     _ = c.vkGetSwapchainImagesKHR(logical_device, swap_chain, &image_count, images.ptr);
 
     return images;
+}
+
+fn createImageViews(
+    allocator: *mem.Allocator,
+    swap_chain_images: []c.VkImage,
+    swap_chain_image_format: c.VkFormat,
+    device: c.VkDevice,
+) ![]c.VkImageView {
+    var image_views = try allocator.alloc(c.VkImageView, swap_chain_images.len);
+
+    const component_swizzle_identity = c.VK_COMPONENT_SWIZZLE_IDENTITY;
+    for (swap_chain_images) |image, i| {
+        var create_info = c.VkImageViewCreateInfo{
+            .sType = c.VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+            .image = image,
+            .viewType = c.VK_IMAGE_VIEW_TYPE_2D,
+            .format = swap_chain_image_format,
+            .components = c.VkComponentMapping{
+                .r = component_swizzle_identity,
+                .g = component_swizzle_identity,
+                .b = component_swizzle_identity,
+                .a = component_swizzle_identity,
+            },
+            .subresourceRange = c.VkImageSubresourceRange{
+                .aspectMask = @enumToInt(c.VK_IMAGE_ASPECT_COLOR_BIT),
+                .baseMipLevel = 0,
+                .levelCount = 1,
+                .baseArrayLayer = 0,
+                .layerCount = 1,
+            },
+            .pNext = null,
+            .flags = 0,
+        };
+
+        if (c.vkCreateImageView(device, &create_info, null, &image_views[i]) != c.VK_SUCCESS) {
+            return error.UnableToCreateImageView;
+        }
+    }
+
+    return image_views;
 }
 
 const khronos_validation = "VK_LAYER_KHRONOS_validation";
