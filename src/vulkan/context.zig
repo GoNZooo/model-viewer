@@ -56,7 +56,7 @@ pub const Context = struct {
         try initVulkan(allocator, &instance, &extensions, &layers);
 
         var surface: c.VkSurfaceKHR = undefined;
-        if (c.glfwCreateWindowSurface(instance, window, null, &surface) != c.VK_SUCCESS) {
+        if (c.glfwCreateWindowSurface(instance, window, null, &surface) != c.VkResult.VK_SUCCESS) {
             return error.UnableToCreateSurface;
         }
 
@@ -166,7 +166,7 @@ fn initVulkan(
     layers: *[]c.VkLayerProperties,
 ) !void {
     var application_info = c.VkApplicationInfo{
-        .sType = c.VK_STRUCTURE_TYPE_APPLICATION_INFO,
+        .sType = c.VkStructureType.VK_STRUCTURE_TYPE_APPLICATION_INFO,
         .pApplicationName = "MView",
         .applicationVersion = make_version(1, 0, 0),
         .pEngineName = "No Engine",
@@ -179,7 +179,7 @@ fn initVulkan(
     layers.* = try getLayers(allocator);
 
     var create_info = c.VkInstanceCreateInfo{
-        .sType = c.VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+        .sType = c.VkStructureType.VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
         .pApplicationInfo = &application_info,
         .enabledExtensionCount = @intCast(u32, extensions.required.len),
         .ppEnabledExtensionNames = extensions.extensions_start,
@@ -189,7 +189,7 @@ fn initVulkan(
         .flags = 0,
     };
 
-    if (c.vkCreateInstance(&create_info, null, instance) != c.VK_SUCCESS) {
+    if (c.vkCreateInstance(&create_info, null, instance) != c.VkResult.VK_SUCCESS) {
         return error.UnableToCreateVulkanInstance;
     }
 }
@@ -297,7 +297,7 @@ pub fn createLogicalDevice(
     defer allocator.free(queue_create_infos);
     for (queue_families) |qf, i| {
         queue_create_infos[i] = c.VkDeviceQueueCreateInfo{
-            .sType = c.VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+            .sType = c.VkStructureType.VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
             .pNext = null,
             .queueFamilyIndex = qf,
             .queueCount = 1,
@@ -308,7 +308,7 @@ pub fn createLogicalDevice(
 
     var device_features = zeroInit(c.VkPhysicalDeviceFeatures);
     var device_create_info = zeroInit(c.VkDeviceCreateInfo);
-    device_create_info.sType = c.VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+    device_create_info.sType = c.VkStructureType.VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
     device_create_info.pQueueCreateInfos = queue_create_infos.ptr;
     device_create_info.queueCreateInfoCount = @intCast(u32, queue_create_infos.len);
     device_create_info.pEnabledFeatures = &device_features;
@@ -322,7 +322,7 @@ pub fn createLogicalDevice(
         &device_create_info,
         null,
         &logical_device,
-    ) != c.VK_SUCCESS) {
+    ) != c.VkResult.VK_SUCCESS) {
         return error.UnableToCreateLogicalDevice;
     }
 
@@ -395,7 +395,7 @@ fn isDeviceSuitable(
 
     const queue_families = try findQueueFamilies(allocator, device, surface);
     const device_is_discrete_gpu = device_properties.deviceType ==
-        c.VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU;
+        c.VkPhysicalDeviceType.VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU;
     const has_graphics_family = queue_families.graphics_family != null;
     const has_present_family = queue_families.present_family != null;
     const has_device_extension_support = try hasDeviceExtensionSupport(
@@ -503,8 +503,8 @@ fn querySwapChainSupport(
 fn chooseSwapSurfaceFormat(available_formats: []c.VkSurfaceFormatKHR) c.VkSurfaceFormatKHR {
     std.debug.assert(available_formats.len > 0);
     for (available_formats) |f| {
-        if (f.format == c.VK_FORMAT_B8G8R8A8_UNORM and
-            f.colorSpace == c.VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
+        if (f.format == c.VkFormat.VK_FORMAT_B8G8R8A8_UNORM and
+            f.colorSpace == c.VkColorSpaceKHR.VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
         {
             return f;
         }
@@ -517,10 +517,10 @@ fn chooseSwapPresentMode(available_present_modes: []c.VkPresentModeKHR) c.VkPres
     std.debug.assert(available_present_modes.len > 0);
 
     for (available_present_modes) |pm| {
-        if (pm == c.VK_PRESENT_MODE_MAILBOX_KHR) return pm;
+        if (pm == c.VkPresentModeKHR.VK_PRESENT_MODE_MAILBOX_KHR) return pm;
     }
 
-    return c.VK_PRESENT_MODE_FIFO_KHR;
+    return c.VkPresentModeKHR.VK_PRESENT_MODE_FIFO_KHR;
 }
 
 fn chooseSwapExtent(capabilities: c.VkSurfaceCapabilitiesKHR) c.VkExtent2D {
@@ -567,37 +567,39 @@ fn createSwapChain(
     const queue_families = try findQueueFamilies(allocator, physical_device, surface);
     var queue_indices = [_]u32{ queue_families.graphics_family.?, queue_families.present_family.? };
 
-    create_info.sType = c.VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+    create_info.sType = c.VkStructureType.VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
     create_info.surface = surface;
     create_info.minImageCount = image_count;
     create_info.imageFormat = surface_format.format;
     create_info.imageColorSpace = surface_format.colorSpace;
     create_info.imageExtent = swap_extent;
     create_info.imageArrayLayers = 1;
-    create_info.imageUsage = @enumToInt(c.VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+    create_info.imageUsage = @enumToInt(c.VkImageUsageFlagBits.VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
 
     swap_chain_image_format.* = surface_format.format;
 
     if (queue_families.graphics_family.? != queue_families.present_family.?) {
         std.debug.warn("graphics & present family different\n", .{});
-        create_info.imageSharingMode = c.VK_SHARING_MODE_CONCURRENT;
+        create_info.imageSharingMode = c.VkSharingMode.VK_SHARING_MODE_CONCURRENT;
         create_info.queueFamilyIndexCount = 2;
         create_info.pQueueFamilyIndices = &queue_indices[0];
     } else {
         std.debug.warn("graphics & present family NOT different\n", .{});
-        create_info.imageSharingMode = c.VK_SHARING_MODE_EXCLUSIVE;
+        create_info.imageSharingMode = c.VkSharingMode.VK_SHARING_MODE_EXCLUSIVE;
         // create_info.queueFamilyIndexCount = 0;
         // create_info.pQueueFamilyIndices = null;
     }
 
     create_info.preTransform = swap_chain_support_details.capabilities.currentTransform;
-    create_info.compositeAlpha = c.VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+    create_info.compositeAlpha = c.VkCompositeAlphaFlagBitsKHR.VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
     create_info.presentMode = present_mode;
     create_info.clipped = c.VK_TRUE;
     // create_info.oldSwapchain = null;
 
     var swap_chain: c.VkSwapchainKHR = undefined;
-    if (c.vkCreateSwapchainKHR(logical_device, &create_info, null, &swap_chain) != c.VK_SUCCESS) {
+    if (c.vkCreateSwapchainKHR(logical_device, &create_info, null, &swap_chain) !=
+        c.VkResult.VK_SUCCESS)
+    {
         return error.UnableToCreateSwapChain;
     }
 
@@ -625,12 +627,12 @@ fn createImageViews(
 ) ![]c.VkImageView {
     var image_views = try allocator.alloc(c.VkImageView, swap_chain_images.len);
 
-    const component_swizzle_identity = c.VK_COMPONENT_SWIZZLE_IDENTITY;
+    const component_swizzle_identity = c.VkComponentSwizzle.VK_COMPONENT_SWIZZLE_IDENTITY;
     for (swap_chain_images) |image, i| {
         var create_info = c.VkImageViewCreateInfo{
-            .sType = c.VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+            .sType = c.VkStructureType.VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
             .image = image,
-            .viewType = c.VK_IMAGE_VIEW_TYPE_2D,
+            .viewType = c.VkImageViewType.VK_IMAGE_VIEW_TYPE_2D,
             .format = swap_chain_image_format,
             .components = c.VkComponentMapping{
                 .r = component_swizzle_identity,
@@ -639,7 +641,7 @@ fn createImageViews(
                 .a = component_swizzle_identity,
             },
             .subresourceRange = c.VkImageSubresourceRange{
-                .aspectMask = @enumToInt(c.VK_IMAGE_ASPECT_COLOR_BIT),
+                .aspectMask = @enumToInt(c.VkImageAspectFlagBits.VK_IMAGE_ASPECT_COLOR_BIT),
                 .baseMipLevel = 0,
                 .levelCount = 1,
                 .baseArrayLayer = 0,
@@ -649,7 +651,9 @@ fn createImageViews(
             .flags = 0,
         };
 
-        if (c.vkCreateImageView(device, &create_info, null, &image_views[i]) != c.VK_SUCCESS) {
+        if (c.vkCreateImageView(device, &create_info, null, &image_views[i]) !=
+            c.VkResult.VK_SUCCESS)
+        {
             return error.UnableToCreateImageView;
         }
     }
