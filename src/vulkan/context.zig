@@ -45,6 +45,7 @@ pub const Context = struct {
     swap_extent: c.VkExtent2D,
     swap_chain_image_format: c.VkFormat,
     image_views: []c.VkImageView,
+    queue_create_infos: []c.VkDeviceQueueCreateInfo,
 
     _allocator: *mem.Allocator,
 
@@ -86,6 +87,7 @@ pub const Context = struct {
 
         var queue: c.VkQueue = undefined;
         var present_queue: c.VkQueue = undefined;
+        var queue_create_infos: []c.VkDeviceQueueCreateInfo = undefined;
         var logical_device = try createLogicalDevice(
             allocator,
             physical_device,
@@ -93,6 +95,7 @@ pub const Context = struct {
             &present_queue,
             surface,
             device_extensions,
+            &queue_create_infos,
         );
         if (logical_device == null) return error.NoLogicalDevice;
 
@@ -137,6 +140,7 @@ pub const Context = struct {
             .swap_extent = swap_extent,
             .swap_chain_image_format = swap_chain_image_format,
             .image_views = image_views,
+            .queue_create_infos = queue_create_infos,
             ._allocator = allocator,
         };
     }
@@ -152,6 +156,7 @@ pub const Context = struct {
         self._allocator.free(self.image_views);
         self._allocator.free(self.swap_chain_images);
         self._allocator.free(self.layers);
+        self._allocator.free(self.queue_create_infos);
         self.extensions.deinit();
     }
 };
@@ -280,6 +285,7 @@ pub fn createLogicalDevice(
     present_queue: *c.VkQueue,
     surface: c.VkSurfaceKHR,
     device_extensions: ExtensionInfo,
+    queue_create_infos: *[]c.VkDeviceQueueCreateInfo,
 ) !c.VkDevice {
     var queue_indices = try findQueueFamilies(allocator, physical_device, surface);
     var queue_families = r: {
@@ -290,10 +296,10 @@ pub fn createLogicalDevice(
         }
     };
     var queue_priority: f32 = 1.0;
-    var queue_create_infos = try allocator.alloc(c.VkDeviceQueueCreateInfo, queue_families.len);
-    defer allocator.free(queue_create_infos);
+    queue_create_infos.* = try allocator.alloc(c.VkDeviceQueueCreateInfo, queue_families.len);
+    // defer allocator.free(queue_create_infos);
     for (queue_families) |qf, i| {
-        queue_create_infos[i] = c.VkDeviceQueueCreateInfo{
+        queue_create_infos.*[i] = c.VkDeviceQueueCreateInfo{
             .sType = c.VkStructureType.VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
             .pNext = null,
             .queueFamilyIndex = qf,
