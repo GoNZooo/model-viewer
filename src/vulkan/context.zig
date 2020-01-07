@@ -45,7 +45,6 @@ pub const Context = struct {
     swap_extent: c.VkExtent2D,
     swap_chain_image_format: c.VkFormat,
     image_views: []c.VkImageView,
-    queue_create_infos: []c.VkDeviceQueueCreateInfo,
 
     _allocator: *mem.Allocator,
 
@@ -87,7 +86,6 @@ pub const Context = struct {
 
         var queue: c.VkQueue = undefined;
         var present_queue: c.VkQueue = undefined;
-        var queue_create_infos: []c.VkDeviceQueueCreateInfo = undefined;
         var logical_device = try createLogicalDevice(
             allocator,
             physical_device,
@@ -139,7 +137,6 @@ pub const Context = struct {
             .swap_extent = swap_extent,
             .swap_chain_image_format = swap_chain_image_format,
             .image_views = image_views,
-            .queue_create_infos = queue_create_infos,
             ._allocator = allocator,
         };
     }
@@ -148,13 +145,13 @@ pub const Context = struct {
         for (self.image_views) |view| {
             c.vkDestroyImageView(self.logical_device, view, null);
         }
+        c.vkDestroySwapchainKHR(self.logical_device, self.swap_chain.?, null);
         c.vkDestroyDevice(self.logical_device, null);
         c.vkDestroySurfaceKHR(self.instance, self.surface, null);
         c.vkDestroyInstance(self.instance, null);
         self._allocator.free(self.image_views);
         self._allocator.free(self.swap_chain_images);
         self._allocator.free(self.layers);
-        self._allocator.free(self.queue_create_infos);
         self.extensions.deinit();
     }
 };
