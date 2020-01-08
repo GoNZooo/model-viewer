@@ -39,7 +39,7 @@ pub fn build(b: *Builder) void {
     const run_cmd = exe.run();
     run_cmd.step.dependOn(b.getInstallStep());
 
-    const vulkan_run_cmd = exe.run();
+    const vulkan_run_cmd = vulkan_exe.run();
     vulkan_run_cmd.step.dependOn(b.getInstallStep());
 
     const run_step = b.step("run", "Run the app");
