@@ -196,18 +196,18 @@ fn initVulkan(
     };
 
     extensions.* = try getExtensions(allocator);
-    for (extensions.required) |re| {
-        debug.warn("re={s}\n", .{re});
-    }
-    for (extensions.available) |ae| {
-        const extension_name: [*:0]const u8 = @ptrCast([*:0]const u8, &ae.extensionName);
-        debug.warn("ae={s}\n", .{extension_name});
-    }
+    // for (extensions.required) |re| {
+    //     debug.warn("re={s}\n", .{re});
+    // }
+    // for (extensions.available) |ae| {
+    //     const extension_name: [*:0]const u8 = @ptrCast([*:0]const u8, &ae.extensionName);
+    //     debug.warn("ae={s}\n", .{extension_name});
+    // }
     layers.* = try getLayers(allocator);
-    for (layers.*) |l| {
-        const layer_name: [*:0]const u8 = @ptrCast([*:0]const u8, &l.layerName);
-        debug.warn("l={s}\n", .{layer_name});
-    }
+    // for (layers.*) |l| {
+    //     const layer_name: [*:0]const u8 = @ptrCast([*:0]const u8, &l.layerName);
+    //     debug.warn("l={s}\n", .{layer_name});
+    // }
 
     var create_info = c.VkInstanceCreateInfo{
         .sType = c.VkStructureType.VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,

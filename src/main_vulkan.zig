@@ -57,21 +57,21 @@ pub fn main() anyerror!void {
 
     var context = try Context.init(heap.page_allocator, window, needs_discrete_gpu);
     defer context.deinit();
-    // std.debug.warn("context: {}\n", .{context});
-    // std.debug.warn("required extensions: {}\n", .{context.extensions.required.len});
-    // for (context.extensions.required) |extension| {
-    //     std.debug.warn("\t{s}\n", .{extension});
-    // }
-    // std.debug.warn("available extensions: {}\n", .{context.extensions.available.len});
-    // for (context.extensions.available) |extension| {
-    //     var extension_name: [*:0]const u8 = @ptrCast([*:0]const u8, &extension.extensionName);
-    //     std.debug.warn("\t{s}\n", .{extension_name});
-    // }
-    // std.debug.warn("available layers: {}\n", .{context.layers.len});
-    // for (context.layers) |layer| {
-    //     var layer_name: [*:0]const u8 = @ptrCast([*:0]const u8, &layer.layerName);
-    //     std.debug.warn("\t{s}\n", .{layer_name});
-    // }
+    std.debug.warn("context: {}\n", .{context});
+    std.debug.warn("required extensions: {}\n", .{context.extensions.required.len});
+    for (context.extensions.required) |extension| {
+        std.debug.warn("\t{s}\n", .{extension});
+    }
+    std.debug.warn("available extensions: {}\n", .{context.extensions.available.len});
+    for (context.extensions.available) |extension| {
+        var extension_name: [*:0]const u8 = @ptrCast([*:0]const u8, &extension.extensionName);
+        std.debug.warn("\t{s}\n", .{extension_name});
+    }
+    std.debug.warn("available layers: {}\n", .{context.layers.len});
+    for (context.layers) |layer| {
+        var layer_name: [*:0]const u8 = @ptrCast([*:0]const u8, &layer.layerName);
+        std.debug.warn("\t{s}\n", .{layer_name});
+    }
 
     std.debug.warn("queue: {}\n", .{context.queue});
     std.debug.warn("present_queue: {}\n", .{context.present_queue});
