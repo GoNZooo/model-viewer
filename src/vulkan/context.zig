@@ -117,7 +117,7 @@ pub const Context = struct {
             &swap_chain_image_format,
         );
         // This crashes compilation, "broken LLVM module found: Duplicate integer as switch case"
-        // std.debug.warn("surface_format: {}\n", .{surface_format});
+        // debug.warn("surface_format: {}\n", .{surface_format});
 
         var swap_chain_images = try getSwapChainImages(allocator, logical_device, swap_chain);
         var image_views = try createImageViews(
