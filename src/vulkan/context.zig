@@ -1,5 +1,6 @@
 const std = @import("std");
 const mem = std.mem;
+const debug = std.debug;
 
 const spv = @import("./spv.zig");
 const c = @import("../c.zig");
@@ -47,6 +48,8 @@ pub const Context = struct {
     swap_chain_image_format: c.VkFormat,
     image_views: []c.VkImageView,
     queue_create_infos: []c.VkDeviceQueueCreateInfo,
+    vertex_shader_module: c.VkShaderModule,
+    fragment_shader_module: c.VkShaderModule,
 
     _allocator: *mem.Allocator,
 
@@ -124,7 +127,14 @@ pub const Context = struct {
             logical_device,
         );
 
-        try createGraphicsPipeline(allocator);
+        var vertex_shader_module: c.VkShaderModule = undefined;
+        var fragment_shader_module: c.VkShaderModule = undefined;
+        try createGraphicsPipeline(
+            allocator,
+            logical_device,
+            &vertex_shader_module,
+            &fragment_shader_module,
+        );
 
         return Self{
             .instance = instance,
@@ -144,11 +154,15 @@ pub const Context = struct {
             .swap_chain_image_format = swap_chain_image_format,
             .image_views = image_views,
             .queue_create_infos = queue_create_infos,
+            .vertex_shader_module = vertex_shader_module,
+            .fragment_shader_module = fragment_shader_module,
             ._allocator = allocator,
         };
     }
 
     pub fn deinit(self: *Self) void {
+        c.vkDestroyShaderModule(self.logical_device, self.vertex_shader_module, null);
+        c.vkDestroyShaderModule(self.logical_device, self.fragment_shader_module, null);
         for (self.image_views) |view| {
             c.vkDestroyImageView(self.logical_device, view, null);
         }
@@ -449,11 +463,11 @@ fn hasDeviceExtensionSupport(
     var found_all = true;
     for (device_extensions.required) |extension_name| {
         if (!hasExtension(extension_name, available_extensions)) {
-            std.debug.warn("could not find required extension: {}\n", .{extension_name});
+            debug.warn("could not find required extension: {}\n", .{extension_name});
             found_all = false;
             break;
         }
-        std.debug.warn("found required extension: {}\n", .{extension_name});
+        debug.warn("found required extension: {}\n", .{extension_name});
     }
 
     return found_all;
@@ -507,7 +521,7 @@ fn querySwapChainSupport(
 }
 
 fn chooseSwapSurfaceFormat(available_formats: []c.VkSurfaceFormatKHR) c.VkSurfaceFormatKHR {
-    std.debug.assert(available_formats.len > 0);
+    debug.assert(available_formats.len > 0);
     for (available_formats) |f| {
         if (f.format == c.VkFormat.VK_FORMAT_B8G8R8A8_UNORM and
             f.colorSpace == c.VkColorSpaceKHR.VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
@@ -520,7 +534,7 @@ fn chooseSwapSurfaceFormat(available_formats: []c.VkSurfaceFormatKHR) c.VkSurfac
 }
 
 fn chooseSwapPresentMode(available_present_modes: []c.VkPresentModeKHR) c.VkPresentModeKHR {
-    std.debug.assert(available_present_modes.len > 0);
+    debug.assert(available_present_modes.len > 0);
 
     for (available_present_modes) |pm| {
         if (pm == c.VkPresentModeKHR.VK_PRESENT_MODE_MAILBOX_KHR) return pm;
@@ -585,12 +599,12 @@ fn createSwapChain(
     swap_chain_image_format.* = surface_format.format;
 
     if (queue_families.graphics_family.? != queue_families.present_family.?) {
-        std.debug.warn("graphics & present family different\n", .{});
+        debug.warn("graphics & present family different\n", .{});
         create_info.imageSharingMode = c.VkSharingMode.VK_SHARING_MODE_CONCURRENT;
         create_info.queueFamilyIndexCount = 2;
         create_info.pQueueFamilyIndices = &queue_indices[0];
     } else {
-        std.debug.warn("graphics & present family NOT different\n", .{});
+        debug.warn("graphics & present family NOT different\n", .{});
         create_info.imageSharingMode = c.VkSharingMode.VK_SHARING_MODE_EXCLUSIVE;
         // create_info.queueFamilyIndexCount = 0;
         // create_info.pQueueFamilyIndices = null;
@@ -670,10 +684,22 @@ fn createImageViews(
     return image_views;
 }
 
-fn createGraphicsPipeline(allocator: *mem.Allocator) !void {
-    const vertex_shader_code = try spv.readFile(allocator, "shaders/vertex.spv");
-    const fragment_shader_code = try spv.readFile(allocator, "shaders/fragment.spv");
+fn createGraphicsPipeline(
+    allocator: *mem.Allocator,
+    device: c.VkDevice,
+    vertex_shader_module: *c.VkShaderModule,
+    fragment_shader_module: *c.VkShaderModule,
+) !void {
+    const vertex_shader_code = try spv.readFile(allocator, vertex_shader_filename);
+    const fragment_shader_code = try spv.readFile(allocator, fragment_shader_filename);
+
+    vertex_shader_module.* = try spv.createShaderModule(device, vertex_shader_code);
+    fragment_shader_module.* = try spv.createShaderModule(device, fragment_shader_code);
 }
+
+const vertex_shader_filename = "shaders\\vertex.spv";
+
+const fragment_shader_filename = "shaders\\fragment.spv";
 
 const khronos_validation = "VK_LAYER_KHRONOS_validation";
 
