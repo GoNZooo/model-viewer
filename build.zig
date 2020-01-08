@@ -3,7 +3,7 @@ const Builder = @import("std").build.Builder;
 pub fn build(b: *Builder) void {
     const mode = b.standardReleaseOptions();
     const exe = b.addExecutable("model-viewer", "src/main.zig");
-    const vulkan_exe = b.addExecutable("model-viewer", "src/main_vulkan.zig");
+    const vulkan_exe = b.addExecutable("model-viewer-vulkan", "src/main_vulkan.zig");
 
     exe.addCSourceFile("dependencies/glad/src/glad.c", &[_][]const u8{"-std=c99"});
     exe.addIncludeDir("dependencies/glad/include");
