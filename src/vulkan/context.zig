@@ -1,6 +1,7 @@
 const std = @import("std");
 const mem = std.mem;
 
+const spv = @import("./spv.zig");
 const c = @import("../c.zig");
 
 pub const ExtensionInfo = struct {
@@ -122,6 +123,8 @@ pub const Context = struct {
             swap_chain_image_format,
             logical_device,
         );
+
+        try createGraphicsPipeline(allocator);
 
         return Self{
             .instance = instance,
@@ -654,14 +657,22 @@ fn createImageViews(
             .flags = 0,
         };
 
-        if (c.vkCreateImageView(device, &create_info, null, &image_views[i]) !=
-            c.VkResult.VK_SUCCESS)
-        {
+        if (c.vkCreateImageView(
+            device,
+            &create_info,
+            null,
+            &image_views[i],
+        ) != c.VkResult.VK_SUCCESS) {
             return error.UnableToCreateImageView;
         }
     }
 
     return image_views;
+}
+
+fn createGraphicsPipeline(allocator: *mem.Allocator) !void {
+    const vertex_shader_code = try spv.readFile(allocator, "shaders/vertex.spv");
+    const fragment_shader_code = try spv.readFile(allocator, "shaders/fragment.spv");
 }
 
 const khronos_validation = "VK_LAYER_KHRONOS_validation";
