@@ -1,8 +1,10 @@
 const std = @import("std");
-const obj = @import("./obj.zig");
 const mem = std.mem;
 const heap = std.heap;
+const process = std.process;
+const debug = std.debug;
 
+const obj = @import("./obj.zig");
 const vulkan_utilities = @import("vulkan/utilities.zig");
 const Context = @import("vulkan/context.zig").Context;
 
@@ -32,15 +34,17 @@ extern fn handleKey(
     }
 }
 
-// c.glfwWindowHint(c.GLFW_CONTEXT_VERSION_MAJOR, 4);
-// c.glfwWindowHint(c.GLFW_CONTEXT_VERSION_MINOR, 5);
-// c.glfwWindowHint(c.GLFW_OPENGL_FORWARD_COMPAT, glad.GL_TRUE);
-// c.glfwWindowHint(c.GLFW_OPENGL_DEBUG_CONTEXT, c.GL_TRUE);
-// c.glfwWindowHint(c.GLFW_OPENGL_PROFILE, c.GLFW_OPENGL_CORE_PROFILE);
-// c.glfwWindowHint(c.GLFW_DEPTH_BITS, 0);
-// c.glfwWindowHint(c.GLFW_STENCIL_BITS, 8);
-
 pub fn main() anyerror!void {
+    var arg_iterator = process.args();
+    const needs_discrete_gpu = needs: {
+        if (arg_iterator.next(heap.page_allocator)) |arg| {
+            if (mem.eql(u8, try arg, "yes")) break :needs true;
+        }
+
+        break :needs false;
+    };
+    debug.warn("needs_discrete_gpu={}\n", .{needs_discrete_gpu});
+
     _ = c.glfwSetErrorCallback(errorCallback);
     if (c.glfwInit() == c.GLFW_FALSE) @panic("glfwInit() failed\n");
     defer c.glfwTerminate();
@@ -51,7 +55,7 @@ pub fn main() anyerror!void {
     };
     defer c.glfwDestroyWindow(window);
 
-    var context = try Context.init(heap.page_allocator, window);
+    var context = try Context.init(heap.page_allocator, window, needs_discrete_gpu);
     defer context.deinit();
     // std.debug.warn("context: {}\n", .{context});
     std.debug.warn("required extensions: {}\n", .{context.extensions.required.len});

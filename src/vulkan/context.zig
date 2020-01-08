@@ -53,7 +53,7 @@ pub const Context = struct {
 
     _allocator: *mem.Allocator,
 
-    pub fn init(allocator: *mem.Allocator, window: *c.GLFWwindow) !Self {
+    pub fn init(allocator: *mem.Allocator, window: *c.GLFWwindow, needs_discrete_gpu: bool) !Self {
         var instance: c.VkInstance = undefined;
         var extensions: ExtensionInfo = undefined;
         var layers: []c.VkLayerProperties = undefined;
@@ -81,6 +81,7 @@ pub const Context = struct {
             allocator,
             instance,
             surface,
+            needs_discrete_gpu,
             &swap_chain_support_details,
             &device_extensions,
             &surface_format,
@@ -195,15 +196,26 @@ fn initVulkan(
     };
 
     extensions.* = try getExtensions(allocator);
+    for (extensions.required) |re| {
+        debug.warn("re={s}\n", .{re});
+    }
+    for (extensions.available) |ae| {
+        const extension_name: [*:0]const u8 = @ptrCast([*:0]const u8, &ae.extensionName);
+        debug.warn("ae={s}\n", .{extension_name});
+    }
     layers.* = try getLayers(allocator);
+    for (layers.*) |l| {
+        const layer_name: [*:0]const u8 = @ptrCast([*:0]const u8, &l.layerName);
+        debug.warn("l={s}\n", .{layer_name});
+    }
 
     var create_info = c.VkInstanceCreateInfo{
         .sType = c.VkStructureType.VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
         .pApplicationInfo = &application_info,
         .enabledExtensionCount = @intCast(u32, extensions.required.len),
         .ppEnabledExtensionNames = extensions.extensions_start,
-        .ppEnabledLayerNames = &validation_layers[0],
-        .enabledLayerCount = validation_layers.len,
+        .ppEnabledLayerNames = null,
+        .enabledLayerCount = 0,
         .pNext = null,
         .flags = 0,
     };
@@ -219,10 +231,9 @@ fn make_version(major: u32, minor: u32, patch: u32) u32 {
 
 pub fn getExtensions(allocator: *mem.Allocator) !ExtensionInfo {
     var required_extensions_count: u32 = undefined;
-    var vulkan_extension_count: u32 = undefined;
     var glfw_extensions_return: [*c]const [*c]const u8 = 0;
-
     glfw_extensions_return = c.glfwGetRequiredInstanceExtensions(&required_extensions_count);
+    var vulkan_extension_count: u32 = undefined;
     _ = c.vkEnumerateInstanceExtensionProperties(null, &vulkan_extension_count, null);
     var vulkan_extensions = try allocator.alloc(c.VkExtensionProperties, vulkan_extension_count);
     _ = c.vkEnumerateInstanceExtensionProperties(
@@ -356,6 +367,7 @@ pub fn pickPhysicalDevice(
     allocator: *mem.Allocator,
     instance: c.VkInstance,
     surface: c.VkSurfaceKHR,
+    needs_discrete_gpu: bool,
     swap_chain_support_details: *SwapChainSupportDetails,
     device_extensions: *ExtensionInfo,
     surface_format: *c.VkSurfaceFormatKHR,
@@ -377,6 +389,7 @@ pub fn pickPhysicalDevice(
             allocator,
             device,
             surface,
+            needs_discrete_gpu,
             swap_chain_support_details,
             device_extensions,
             surface_format,
@@ -401,6 +414,7 @@ fn isDeviceSuitable(
     allocator: *mem.Allocator,
     device: c.VkPhysicalDevice,
     surface: c.VkSurfaceKHR,
+    needs_discrete_gpu: bool,
     swap_chain_support_details: *SwapChainSupportDetails,
     device_extensions: *ExtensionInfo,
     surface_format: *c.VkSurfaceFormatKHR,
@@ -438,8 +452,12 @@ fn isDeviceSuitable(
             swap_chain_support_details.present_modes.len != 0;
     }
 
-    return device_is_discrete_gpu and has_graphics_family and has_present_family and
-        has_device_extension_support;
+    // if (needs_discrete_gpu) {
+    //     return device_is_discrete_gpu and has_graphics_family and has_present_family and
+    //         has_device_extension_support;
+    // } else {
+    return has_graphics_family and has_present_family and has_device_extension_support;
+    // }
 }
 
 fn hasDeviceExtensionSupport(
@@ -703,7 +721,9 @@ const fragment_shader_filename = "shaders\\fragment.spv";
 
 const khronos_validation = "VK_LAYER_KHRONOS_validation";
 
-const validation_layers = [_][*:0]const u8{khronos_validation};
+const lunarg_validation = "VK_LAYER_LUNARG_validation";
+
+const validation_layers = [_][*:0]const u8{lunarg_validation};
 
 const required_device_extensions: []const []const u8 = &[_][]const u8{
     c.VK_KHR_SWAPCHAIN_EXTENSION_NAME[0..16],
