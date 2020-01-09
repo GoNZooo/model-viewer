@@ -50,6 +50,7 @@ pub const Context = struct {
     queue_create_infos: []c.VkDeviceQueueCreateInfo,
     vertex_shader_module: c.VkShaderModule,
     fragment_shader_module: c.VkShaderModule,
+    pipeline_layout: c.VkPipelineLayout,
 
     _allocator: *mem.Allocator,
 
@@ -130,11 +131,14 @@ pub const Context = struct {
 
         var vertex_shader_module: c.VkShaderModule = undefined;
         var fragment_shader_module: c.VkShaderModule = undefined;
+        var pipeline_layout: c.VkPipelineLayout = undefined;
         try createGraphicsPipeline(
             allocator,
             logical_device,
+            swap_extent,
             &vertex_shader_module,
             &fragment_shader_module,
+            &pipeline_layout,
         );
 
         return Self{
@@ -157,11 +161,13 @@ pub const Context = struct {
             .queue_create_infos = queue_create_infos,
             .vertex_shader_module = vertex_shader_module,
             .fragment_shader_module = fragment_shader_module,
+            .pipeline_layout = pipeline_layout,
             ._allocator = allocator,
         };
     }
 
     pub fn deinit(self: *Self) void {
+        c.vkDestroyPipelineLayout(self.logical_device, self.pipeline_layout, null);
         c.vkDestroyShaderModule(self.logical_device, self.vertex_shader_module, null);
         c.vkDestroyShaderModule(self.logical_device, self.fragment_shader_module, null);
         for (self.image_views) |view| {
@@ -705,15 +711,165 @@ fn createImageViews(
 fn createGraphicsPipeline(
     allocator: *mem.Allocator,
     device: c.VkDevice,
+    swap_extent: c.VkExtent2D,
     vertex_shader_module: *c.VkShaderModule,
     fragment_shader_module: *c.VkShaderModule,
+    pipeline_layout: *c.VkPipelineLayout,
 ) !void {
     const vertex_shader_code = try spv.readFile(allocator, vertex_shader_filename);
     const fragment_shader_code = try spv.readFile(allocator, fragment_shader_filename);
 
     vertex_shader_module.* = try spv.createShaderModule(device, vertex_shader_code);
     fragment_shader_module.* = try spv.createShaderModule(device, fragment_shader_code);
+
+    const vertex_shader_stage_create_info = c.VkPipelineShaderStageCreateInfo{
+        .sType = c.VkStructureType.VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+        .stage = c.VkShaderStageFlagBits.VK_SHADER_STAGE_VERTEX_BIT,
+        .module = vertex_shader_module.*,
+        .pName = "main",
+        .pSpecializationInfo = null,
+        .pNext = null,
+        .flags = 0,
+    };
+
+    const fragment_shader_stage_create_info = c.VkPipelineShaderStageCreateInfo{
+        .sType = c.VkStructureType.VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+        .stage = c.VkShaderStageFlagBits.VK_SHADER_STAGE_FRAGMENT_BIT,
+        .module = fragment_shader_module.*,
+        .pName = "main",
+        .pSpecializationInfo = null,
+        .pNext = null,
+        .flags = 0,
+    };
+
+    const vertex_input_info = c.VkPipelineVertexInputStateCreateInfo{
+        .sType = c.VkStructureType.VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+        .vertexBindingDescriptionCount = 0,
+        .pVertexBindingDescriptions = null,
+        .vertexAttributeDescriptionCount = 0,
+        .pVertexAttributeDescriptions = null,
+        .pNext = null,
+        .flags = 0,
+    };
+
+    const input_assembly = c.VkPipelineInputAssemblyStateCreateInfo{
+        .sType = c.VkStructureType.VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+        .topology = c.VkPrimitiveTopology.VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+        .primitiveRestartEnable = c.VK_FALSE,
+        .pNext = null,
+        .flags = 0,
+    };
+
+    const viewport = c.VkViewport{
+        .x = 0.0,
+        .y = 0.0,
+        .width = @intToFloat(f32, swap_extent.width),
+        .height = @intToFloat(f32, swap_extent.height),
+        .minDepth = 0.0,
+        .maxDepth = 1.0,
+    };
+
+    const scissor = c.VkRect2D{ .offset = c.VkOffset2D{ .x = 0, .y = 0 }, .extent = swap_extent };
+
+    const viewport_state = c.VkPipelineViewportStateCreateInfo{
+        .sType = c.VkStructureType.VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+        .viewportCount = 1,
+        .pViewports = &viewport,
+        .scissorCount = 1,
+        .pScissors = &scissor,
+        .pNext = null,
+        .flags = 0,
+    };
+
+    const rasterizer = c.VkPipelineRasterizationStateCreateInfo{
+        .sType = c.VkStructureType.VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+        .depthClampEnable = c.VK_FALSE,
+        .rasterizerDiscardEnable = c.VK_FALSE,
+        .polygonMode = c.VkPolygonMode.VK_POLYGON_MODE_FILL,
+        .cullMode = c.VK_CULL_MODE_BACK_BIT,
+        .frontFace = c.VkFrontFace.VK_FRONT_FACE_CLOCKWISE,
+        .depthBiasEnable = c.VK_FALSE,
+        .depthBiasConstantFactor = 0.0,
+        .depthBiasClamp = 0.0,
+        .depthBiasSlopeFactor = 0.0,
+        .lineWidth = 1.0,
+        .pNext = null,
+        .flags = 0,
+    };
+
+    const multisampling = c.VkPipelineMultisampleStateCreateInfo{
+        .sType = c.VkStructureType.VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+        .sampleShadingEnable = c.VK_FALSE,
+        .rasterizationSamples = c.VkSampleCountFlagBits.VK_SAMPLE_COUNT_1_BIT,
+        .minSampleShading = 1.0,
+        .pSampleMask = null,
+        .alphaToCoverageEnable = c.VK_FALSE,
+        .alphaToOneEnable = c.VK_FALSE,
+        .pNext = null,
+        .flags = 0,
+    };
+
+    const color_blend_attachment = c.VkPipelineColorBlendAttachmentState{
+        .blendEnable = c.VK_TRUE,
+        .colorWriteMask = c.VK_COLOR_COMPONENT_R_BIT | c.VK_COLOR_COMPONENT_G_BIT |
+            c.VK_COLOR_COMPONENT_B_BIT | c.VK_COLOR_COMPONENT_A_BIT,
+        .srcColorBlendFactor = c.VkBlendFactor.VK_BLEND_FACTOR_SRC_ALPHA,
+        .dstColorBlendFactor = c.VkBlendFactor.VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+        .colorBlendOp = c.VkBlendOp.VK_BLEND_OP_ADD,
+        .srcAlphaBlendFactor = c.VkBlendFactor.VK_BLEND_FACTOR_ONE,
+        .dstAlphaBlendFactor = c.VkBlendFactor.VK_BLEND_FACTOR_ZERO,
+        .alphaBlendOp = c.VkBlendOp.VK_BLEND_OP_ADD,
+    };
+
+    const blend_constants = [_]f32{ 0.0, 0.0, 0.0, 0.0 };
+    const color_blending = c.VkPipelineColorBlendStateCreateInfo{
+        .sType = c.VkStructureType.VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+        .logicOpEnable = c.VK_FALSE,
+        .logicOp = c.VkLogicOp.VK_LOGIC_OP_COPY,
+        .attachmentCount = 1,
+        .pAttachments = &color_blend_attachment,
+        .blendConstants = blend_constants,
+        .pNext = null,
+        .flags = 0,
+    };
+
+    const dynamic_states = [_]c.VkDynamicState{
+        c.VkDynamicState.VK_DYNAMIC_STATE_VIEWPORT,
+        c.VkDynamicState.VK_DYNAMIC_STATE_LINE_WIDTH,
+    };
+
+    const dynamic_state = c.VkPipelineDynamicStateCreateInfo{
+        .sType = c.VkStructureType.VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+        .dynamicStateCount = dynamic_states.len,
+        .pDynamicStates = &dynamic_states,
+        .pNext = null,
+        .flags = 0,
+    };
+
+    const pipeline_layout_create_info = c.VkPipelineLayoutCreateInfo{
+        .sType = c.VkStructureType.VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+        .setLayoutCount = 0,
+        .pSetLayouts = null,
+        .pushConstantRangeCount = 0,
+        .pPushConstantRanges = null,
+        .pNext = null,
+        .flags = 0,
+    };
+
+    if (c.vkCreatePipelineLayout(
+        device,
+        &pipeline_layout_create_info,
+        null,
+        pipeline_layout,
+    ) != c.VkResult.VK_SUCCESS) {
+        return error.UnableToCreatePipelineLayout;
+    }
 }
+
+const ShaderStages = struct {
+    vertex_shader_stage_create_info: c.VkPipelineShaderStageCreateInfo,
+    fragment_shader_stage_create_info: c.VkPipelineShaderStageCreateInfo,
+};
 
 const vertex_shader_filename = "shaders\\vertex.spv";
 
