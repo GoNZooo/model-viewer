@@ -129,6 +129,9 @@ pub const Context = struct {
             logical_device,
         );
 
+        // @TODO: add `createRenderPass`
+        createRenderPass();
+
         var vertex_shader_module: c.VkShaderModule = undefined;
         var fragment_shader_module: c.VkShaderModule = undefined;
         var pipeline_layout: c.VkPipelineLayout = undefined;
