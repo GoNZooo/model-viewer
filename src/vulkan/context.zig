@@ -463,12 +463,12 @@ fn isDeviceSuitable(
             swap_chain_support_details.present_modes.len != 0;
     }
 
-    // if (needs_discrete_gpu) {
-    //     return device_is_discrete_gpu and has_graphics_family and has_present_family and
-    //         has_device_extension_support;
-    // } else {
-    return has_graphics_family and has_present_family and has_device_extension_support;
-    // }
+    if (needs_discrete_gpu) {
+        return device_is_discrete_gpu and has_graphics_family and has_present_family and
+            has_device_extension_support;
+    } else {
+        return has_graphics_family and has_present_family and has_device_extension_support;
+    }
 }
 
 fn hasDeviceExtensionSupport(
