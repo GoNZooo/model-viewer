@@ -55,6 +55,7 @@ pub const Context = struct {
     render_pass: c.VkRenderPass,
     graphics_pipeline: c.VkPipeline,
     swap_chain_frame_buffers: []c.VkFramebuffer,
+    // command_pool: c.VkCommandPool,
 
     _allocator: *mem.Allocator,
 
@@ -83,6 +84,7 @@ pub const Context = struct {
         var swap_extent: c.VkExtent2D = undefined;
 
         var physical_device_properties: c.VkPhysicalDeviceProperties = undefined;
+        var queue_family_indices: QueueFamilyIndices = undefined;
         var physical_device = try pickPhysicalDevice(
             allocator,
             instance,
@@ -94,6 +96,7 @@ pub const Context = struct {
             &present_mode,
             &swap_extent,
             &physical_device_properties,
+            &queue_family_indices,
         );
         if (physical_device == null) return error.NoPhysicalDevice;
         debug.warn("Found device with name '{}'\n", .{physical_device_properties.deviceName});
@@ -109,6 +112,7 @@ pub const Context = struct {
             surface,
             device_extensions,
             &queue_create_infos,
+            queue_family_indices,
         );
         if (logical_device == null) return error.NoLogicalDevice;
 
@@ -123,6 +127,7 @@ pub const Context = struct {
             surface,
             physical_device,
             logical_device,
+            queue_family_indices,
             &swap_chain_image_format,
         );
         // This crashes compilation, "broken LLVM module found: Duplicate integer as switch case"
@@ -158,6 +163,8 @@ pub const Context = struct {
             render_pass,
             swap_extent,
         );
+
+        // const command_pool = createCommandPool(queue_families);
 
         return Self{
             .instance = instance,
@@ -347,13 +354,16 @@ pub fn createLogicalDevice(
     surface: c.VkSurfaceKHR,
     device_extensions: ExtensionInfo,
     queue_create_infos: *[]c.VkDeviceQueueCreateInfo,
+    queue_family_indices: QueueFamilyIndices,
 ) !c.VkDevice {
-    var queue_indices = try findQueueFamilies(allocator, physical_device, surface);
     var queue_families = r: {
-        if (queue_indices.graphics_family.? == queue_indices.present_family.?) {
-            break :r &[_]u32{queue_indices.present_family.?};
+        if (queue_family_indices.graphics_family.? == queue_family_indices.present_family.?) {
+            break :r &[_]u32{queue_family_indices.present_family.?};
         } else {
-            break :r &[_]u32{ queue_indices.graphics_family.?, queue_indices.present_family.? };
+            break :r &[_]u32{
+                queue_family_indices.graphics_family.?,
+                queue_family_indices.present_family.?,
+            };
         }
     };
     var queue_priority: f32 = 1.0;
@@ -390,8 +400,8 @@ pub fn createLogicalDevice(
         return error.UnableToCreateLogicalDevice;
     }
 
-    c.vkGetDeviceQueue(logical_device, queue_indices.graphics_family.?, 0, queue);
-    c.vkGetDeviceQueue(logical_device, queue_indices.present_family.?, 0, present_queue);
+    c.vkGetDeviceQueue(logical_device, queue_family_indices.graphics_family.?, 0, queue);
+    c.vkGetDeviceQueue(logical_device, queue_family_indices.present_family.?, 0, present_queue);
 
     return logical_device;
 }
@@ -407,6 +417,7 @@ pub fn pickPhysicalDevice(
     present_mode: *c.VkPresentModeKHR,
     swap_extent: *c.VkExtent2D,
     physical_device_properties: *c.VkPhysicalDeviceProperties,
+    queue_family_indices: *QueueFamilyIndices,
 ) !c.VkPhysicalDevice {
     var physical_device: c.VkPhysicalDevice = null;
     var device_count: u32 = 0;
@@ -430,6 +441,7 @@ pub fn pickPhysicalDevice(
             present_mode,
             swap_extent,
             physical_device_properties,
+            queue_family_indices,
         )) {
             physical_device = device;
             break;
@@ -456,17 +468,18 @@ fn isDeviceSuitable(
     present_mode: *c.VkPresentModeKHR,
     swap_extent: *c.VkExtent2D,
     physical_device_properties: *c.VkPhysicalDeviceProperties,
+    queue_family_indices: *QueueFamilyIndices,
 ) !bool {
     var device_features: c.VkPhysicalDeviceFeatures = undefined;
 
     _ = c.vkGetPhysicalDeviceProperties(device, physical_device_properties);
     _ = c.vkGetPhysicalDeviceFeatures(device, &device_features);
 
-    const queue_families = try findQueueFamilies(allocator, device, surface);
+    queue_family_indices.* = try findQueueFamilies(allocator, device, surface);
     const device_is_discrete_gpu = physical_device_properties.deviceType ==
         c.VkPhysicalDeviceType.VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU;
-    const has_graphics_family = queue_families.graphics_family != null;
-    const has_present_family = queue_families.present_family != null;
+    const has_graphics_family = queue_family_indices.graphics_family != null;
+    const has_present_family = queue_family_indices.present_family != null;
     const has_device_extension_support = try hasDeviceExtensionSupport(
         allocator,
         device,
@@ -625,6 +638,7 @@ fn createSwapChain(
     surface: c.VkSurfaceKHR,
     physical_device: c.VkPhysicalDevice,
     logical_device: c.VkDevice,
+    queue_family_indices: QueueFamilyIndices,
     swap_chain_image_format: *c.VkFormat,
 ) !c.VkSwapchainKHR {
     var image_count = swap_chain_support_details.capabilities.minImageCount + 1;
@@ -637,8 +651,10 @@ fn createSwapChain(
 
     var create_info = zeroInit(c.VkSwapchainCreateInfoKHR);
 
-    const queue_families = try findQueueFamilies(allocator, physical_device, surface);
-    var queue_indices = [_]u32{ queue_families.graphics_family.?, queue_families.present_family.? };
+    var queue_indices = [_]u32{
+        queue_family_indices.graphics_family.?,
+        queue_family_indices.present_family.?,
+    };
 
     create_info.sType = c.VkStructureType.VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
     create_info.surface = surface;
@@ -651,7 +667,7 @@ fn createSwapChain(
 
     swap_chain_image_format.* = surface_format.format;
 
-    if (queue_families.graphics_family.? != queue_families.present_family.?) {
+    if (queue_family_indices.graphics_family.? != queue_family_indices.present_family.?) {
         debug.warn("graphics & present family different\n", .{});
         create_info.imageSharingMode = c.VkSharingMode.VK_SHARING_MODE_CONCURRENT;
         create_info.queueFamilyIndexCount = 2;
