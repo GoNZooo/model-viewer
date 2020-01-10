@@ -135,4 +135,6 @@ fn drawFrame(context: Context) !void {
     };
 
     _ = c.vkQueuePresentKHR(context.present_queue, &present_info);
+
+    _ = c.vkQueueWaitIdle(context.present_queue);
 }
