@@ -53,6 +53,7 @@ pub const Context = struct {
     pipeline_layout: c.VkPipelineLayout,
     render_pass: c.VkRenderPass,
     graphics_pipeline: c.VkPipeline,
+    swap_chain_frame_buffers: []c.VkFramebuffer,
 
     _allocator: *mem.Allocator,
 
@@ -146,6 +147,9 @@ pub const Context = struct {
             &pipeline_layout,
         );
 
+        // @TODO: create `createFramebuffers()`
+        const swap_chain_frame_buffers = createFramebuffers(allocator);
+
         return Self{
             .instance = instance,
             .physical_device = physical_device,
@@ -169,6 +173,7 @@ pub const Context = struct {
             .pipeline_layout = pipeline_layout,
             .render_pass = render_pass,
             .graphics_pipeline = graphics_pipeline,
+            .swap_chain_frame_buffers = swap_chain_frame_buffers,
             ._allocator = allocator,
         };
     }
