@@ -130,7 +130,7 @@ pub const Context = struct {
             logical_device,
         );
 
-        const render_pass = createRenderPass(swap_chain_image_format);
+        const render_pass = try createRenderPass(logical_device, swap_chain_image_format);
 
         var vertex_shader_module: c.VkShaderModule = undefined;
         var fragment_shader_module: c.VkShaderModule = undefined;
@@ -172,6 +172,7 @@ pub const Context = struct {
 
     pub fn deinit(self: *Self) void {
         c.vkDestroyPipelineLayout(self.logical_device, self.pipeline_layout, null);
+        c.vkDestroyRenderPass(self.logical_device, self.render_pass, null);
         c.vkDestroyShaderModule(self.logical_device, self.vertex_shader_module, null);
         c.vkDestroyShaderModule(self.logical_device, self.fragment_shader_module, null);
         for (self.image_views) |view| {
@@ -875,7 +876,7 @@ const ShaderStages = struct {
     fragment_shader_stage_create_info: c.VkPipelineShaderStageCreateInfo,
 };
 
-fn createRenderPass(swap_chain_image_format: c.VkFormat) c.VkRenderPass {
+fn createRenderPass(device: c.VkDevice, swap_chain_image_format: c.VkFormat) !c.VkRenderPass {
     const color_attachment = c.VkAttachmentDescription{
         .format = swap_chain_image_format,
         .samples = c.VkSampleCountFlagBits.VK_SAMPLE_COUNT_1_BIT,
@@ -888,7 +889,45 @@ fn createRenderPass(swap_chain_image_format: c.VkFormat) c.VkRenderPass {
         .flags = 0,
     };
 
+    const color_attachment_reference = c.VkAttachmentReference{
+        .attachment = 0,
+        .layout = c.VkImageLayout.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+    };
+
+    const subpass = c.VkSubpassDescription{
+        .pipelineBindPoint = c.VkPipelineBindPoint.VK_PIPELINE_BIND_POINT_GRAPHICS,
+        .colorAttachmentCount = 1,
+        .pColorAttachments = &color_attachment_reference,
+        .inputAttachmentCount = 0,
+        .pInputAttachments = null,
+        .pResolveAttachments = null,
+        .pDepthStencilAttachment = null,
+        .preserveAttachmentCount = 0,
+        .pPreserveAttachments = null,
+        .flags = 0,
+    };
+
     var render_pass: c.VkRenderPass = undefined;
+    const render_pass_create_info = c.VkRenderPassCreateInfo{
+        .sType = c.VkStructureType.VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+        .attachmentCount = 1,
+        .pAttachments = &color_attachment,
+        .subpassCount = 1,
+        .pSubpasses = &subpass,
+        .dependencyCount = 0,
+        .pDependencies = null,
+        .pNext = null,
+        .flags = 0,
+    };
+
+    if (c.vkCreateRenderPass(
+        device,
+        &render_pass_create_info,
+        null,
+        &render_pass,
+    ) != c.VkResult.VK_SUCCESS) {
+        return error.UnableToCreateRenderPass;
+    }
 
     return render_pass;
 }
