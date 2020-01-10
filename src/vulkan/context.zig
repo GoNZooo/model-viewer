@@ -56,6 +56,7 @@ pub const Context = struct {
     graphics_pipeline: c.VkPipeline,
     swap_chain_frame_buffers: []c.VkFramebuffer,
     command_pool: c.VkCommandPool,
+    command_buffers: []c.VkCommandBuffer,
 
     _allocator: *mem.Allocator,
 
@@ -166,6 +167,13 @@ pub const Context = struct {
 
         const command_pool = try createCommandPool(logical_device, queue_family_indices);
 
+        const command_buffers = try createCommandBuffers(
+            allocator,
+            logical_device,
+            swap_chain_frame_buffers,
+            command_pool,
+        );
+
         return Self{
             .instance = instance,
             .physical_device = physical_device,
@@ -192,11 +200,18 @@ pub const Context = struct {
             .graphics_pipeline = graphics_pipeline,
             .swap_chain_frame_buffers = swap_chain_frame_buffers,
             .command_pool = command_pool,
+            .command_buffers = command_buffers,
             ._allocator = allocator,
         };
     }
 
     pub fn deinit(self: *Self) void {
+        c.vkFreeCommandBuffers(
+            self.logical_device,
+            self.command_pool,
+            @intCast(u32, self.command_buffers.len),
+            self.command_buffers.ptr,
+        );
         c.vkDestroyCommandPool(self.logical_device, self.command_pool, null);
         for (self.swap_chain_frame_buffers) |frame_buffer| {
             c.vkDestroyFramebuffer(self.logical_device, frame_buffer, null);
@@ -217,6 +232,7 @@ pub const Context = struct {
         self._allocator.free(self.swap_chain_images);
         self._allocator.free(self.layers);
         self._allocator.free(self.queue_create_infos);
+        self._allocator.free(self.command_buffers);
         self.extensions.deinit();
     }
 };
@@ -1065,6 +1081,32 @@ fn createCommandPool(device: c.VkDevice, queue_family_indices: QueueFamilyIndice
     }
 
     return command_pool;
+}
+
+fn createCommandBuffers(
+    allocator: *mem.Allocator,
+    device: c.VkDevice,
+    swap_chain_frame_buffers: []c.VkFramebuffer,
+    command_pool: c.VkCommandPool,
+) ![]c.VkCommandBuffer {
+    var command_buffers = try allocator.alloc(c.VkCommandBuffer, swap_chain_frame_buffers.len);
+
+    const command_buffer_allocate_info = c.VkCommandBufferAllocateInfo{
+        .sType = c.VkStructureType.VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+        .commandPool = command_pool,
+        .level = c.VkCommandBufferLevel.VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+        .commandBufferCount = @intCast(u32, command_buffers.len),
+        .pNext = null,
+    };
+    if (c.vkAllocateCommandBuffers(
+        device,
+        &command_buffer_allocate_info,
+        command_buffers.ptr,
+    ) != c.VkResult.VK_SUCCESS) {
+        return error.UnableToAllocateCommandBuffer;
+    }
+
+    return command_buffers;
 }
 
 const vertex_shader_filename = "shaders\\vertex.spv";
