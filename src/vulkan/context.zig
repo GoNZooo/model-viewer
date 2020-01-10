@@ -67,6 +67,7 @@ pub const Context = struct {
     swap_chain_frame_buffers: []c.VkFramebuffer,
     command_pool: c.VkCommandPool,
     command_buffers: []c.VkCommandBuffer,
+    // @TODO: create 1 of these for each frame that's supposed to be 'in flight'
     semaphores: Semaphores,
 
     _allocator: *mem.Allocator,
