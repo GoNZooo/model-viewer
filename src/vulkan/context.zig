@@ -32,6 +32,7 @@ pub const Context = struct {
     const Self = @This();
 
     physical_device: c.VkPhysicalDevice,
+    physical_device_properties: c.VkPhysicalDeviceProperties,
     logical_device: c.VkDevice,
     extensions: ExtensionInfo,
     device_extensions: ExtensionInfo,
@@ -81,6 +82,7 @@ pub const Context = struct {
         var present_mode: c.VkPresentModeKHR = undefined;
         var swap_extent: c.VkExtent2D = undefined;
 
+        var physical_device_properties: c.VkPhysicalDeviceProperties = undefined;
         var physical_device = try pickPhysicalDevice(
             allocator,
             instance,
@@ -91,8 +93,11 @@ pub const Context = struct {
             &surface_format,
             &present_mode,
             &swap_extent,
+            &physical_device_properties,
         );
         if (physical_device == null) return error.NoPhysicalDevice;
+        // c.vkGetPhysicalDeviceProperties(physical_device, &physical_device_properties);
+        debug.warn("Found device with name '{}'\n", .{physical_device_properties.deviceName});
 
         var queue: c.VkQueue = undefined;
         var present_queue: c.VkQueue = undefined;
@@ -147,12 +152,12 @@ pub const Context = struct {
             &pipeline_layout,
         );
 
-        // @TODO: create `createFramebuffers()`
-        const swap_chain_frame_buffers = createFramebuffers(allocator);
+        const swap_chain_frame_buffers = try createFramebuffers(allocator);
 
         return Self{
             .instance = instance,
             .physical_device = physical_device,
+            .physical_device_properties = physical_device_properties,
             .logical_device = logical_device,
             .extensions = extensions,
             .device_extensions = device_extensions,
@@ -393,6 +398,7 @@ pub fn pickPhysicalDevice(
     surface_format: *c.VkSurfaceFormatKHR,
     present_mode: *c.VkPresentModeKHR,
     swap_extent: *c.VkExtent2D,
+    physical_device_properties: *c.VkPhysicalDeviceProperties,
 ) !c.VkPhysicalDevice {
     var physical_device: c.VkPhysicalDevice = null;
     var device_count: u32 = 0;
@@ -415,6 +421,7 @@ pub fn pickPhysicalDevice(
             surface_format,
             present_mode,
             swap_extent,
+            physical_device_properties,
         )) {
             physical_device = device;
             break;
@@ -440,15 +447,15 @@ fn isDeviceSuitable(
     surface_format: *c.VkSurfaceFormatKHR,
     present_mode: *c.VkPresentModeKHR,
     swap_extent: *c.VkExtent2D,
+    physical_device_properties: *c.VkPhysicalDeviceProperties,
 ) !bool {
-    var device_properties: c.VkPhysicalDeviceProperties = undefined;
     var device_features: c.VkPhysicalDeviceFeatures = undefined;
 
-    _ = c.vkGetPhysicalDeviceProperties(device, &device_properties);
+    _ = c.vkGetPhysicalDeviceProperties(device, physical_device_properties);
     _ = c.vkGetPhysicalDeviceFeatures(device, &device_features);
 
     const queue_families = try findQueueFamilies(allocator, device, surface);
-    const device_is_discrete_gpu = device_properties.deviceType ==
+    const device_is_discrete_gpu = physical_device_properties.deviceType ==
         c.VkPhysicalDeviceType.VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU;
     const has_graphics_family = queue_families.graphics_family != null;
     const has_present_family = queue_families.present_family != null;
@@ -975,6 +982,12 @@ fn createRenderPass(device: c.VkDevice, swap_chain_image_format: c.VkFormat) !c.
     }
 
     return render_pass;
+}
+
+fn createFramebuffers(allocator: *mem.Allocator) ![]c.VkFramebuffer {
+    var frame_buffers = try allocator.alloc(c.VkFramebuffer, 1);
+
+    return frame_buffers;
 }
 
 const vertex_shader_filename = "shaders\\vertex.spv";
