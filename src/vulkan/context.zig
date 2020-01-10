@@ -51,6 +51,7 @@ pub const Context = struct {
     vertex_shader_module: c.VkShaderModule,
     fragment_shader_module: c.VkShaderModule,
     pipeline_layout: c.VkPipelineLayout,
+    render_pass: c.VkRenderPass,
 
     _allocator: *mem.Allocator,
 
@@ -129,8 +130,7 @@ pub const Context = struct {
             logical_device,
         );
 
-        // @TODO: add `createRenderPass`
-        createRenderPass();
+        const render_pass = createRenderPass(swap_chain_image_format);
 
         var vertex_shader_module: c.VkShaderModule = undefined;
         var fragment_shader_module: c.VkShaderModule = undefined;
@@ -165,6 +165,7 @@ pub const Context = struct {
             .vertex_shader_module = vertex_shader_module,
             .fragment_shader_module = fragment_shader_module,
             .pipeline_layout = pipeline_layout,
+            .render_pass = render_pass,
             ._allocator = allocator,
         };
     }
@@ -873,6 +874,24 @@ const ShaderStages = struct {
     vertex_shader_stage_create_info: c.VkPipelineShaderStageCreateInfo,
     fragment_shader_stage_create_info: c.VkPipelineShaderStageCreateInfo,
 };
+
+fn createRenderPass(swap_chain_image_format: c.VkFormat) c.VkRenderPass {
+    const color_attachment = c.VkAttachmentDescription{
+        .format = swap_chain_image_format,
+        .samples = c.VkSampleCountFlagBits.VK_SAMPLE_COUNT_1_BIT,
+        .loadOp = c.VkAttachmentLoadOp.VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp = c.VkAttachmentStoreOp.VK_ATTACHMENT_STORE_OP_STORE,
+        .stencilLoadOp = c.VkAttachmentLoadOp.VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+        .stencilStoreOp = c.VkAttachmentStoreOp.VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        .initialLayout = c.VkImageLayout.VK_IMAGE_LAYOUT_UNDEFINED,
+        .finalLayout = c.VkImageLayout.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+        .flags = 0,
+    };
+
+    var render_pass: c.VkRenderPass = undefined;
+
+    return render_pass;
+}
 
 const vertex_shader_filename = "shaders\\vertex.spv";
 
