@@ -55,7 +55,7 @@ pub const Context = struct {
     render_pass: c.VkRenderPass,
     graphics_pipeline: c.VkPipeline,
     swap_chain_frame_buffers: []c.VkFramebuffer,
-    // command_pool: c.VkCommandPool,
+    command_pool: c.VkCommandPool,
 
     _allocator: *mem.Allocator,
 
@@ -164,7 +164,7 @@ pub const Context = struct {
             swap_extent,
         );
 
-        // const command_pool = createCommandPool(queue_families);
+        const command_pool = try createCommandPool(logical_device, queue_family_indices);
 
         return Self{
             .instance = instance,
@@ -191,11 +191,13 @@ pub const Context = struct {
             .render_pass = render_pass,
             .graphics_pipeline = graphics_pipeline,
             .swap_chain_frame_buffers = swap_chain_frame_buffers,
+            .command_pool = command_pool,
             ._allocator = allocator,
         };
     }
 
     pub fn deinit(self: *Self) void {
+        c.vkDestroyCommandPool(self.logical_device, self.command_pool, null);
         for (self.swap_chain_frame_buffers) |frame_buffer| {
             c.vkDestroyFramebuffer(self.logical_device, frame_buffer, null);
         }
@@ -1042,6 +1044,27 @@ fn createFramebuffers(
     }
 
     return frame_buffers;
+}
+
+fn createCommandPool(device: c.VkDevice, queue_family_indices: QueueFamilyIndices) !c.VkCommandPool {
+    var command_pool: c.VkCommandPool = undefined;
+    const command_pool_create_info = c.VkCommandPoolCreateInfo{
+        .sType = c.VkStructureType.VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+        .queueFamilyIndex = queue_family_indices.graphics_family.?,
+        .pNext = null,
+        .flags = 0,
+    };
+
+    if (c.vkCreateCommandPool(
+        device,
+        &command_pool_create_info,
+        null,
+        &command_pool,
+    ) != c.VkResult.VK_SUCCESS) {
+        return error.UnableToCreateCommandPool;
+    }
+
+    return command_pool;
 }
 
 const vertex_shader_filename = "shaders\\vertex.spv";
