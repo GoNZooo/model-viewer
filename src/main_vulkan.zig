@@ -83,6 +83,8 @@ pub fn main() anyerror!void {
 
         try drawFrame(context);
     }
+
+    _ = c.vkDeviceWaitIdle(context.logical_device);
 }
 
 fn drawFrame(context: Context) !void {
