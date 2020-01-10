@@ -52,6 +52,7 @@ pub const Context = struct {
     fragment_shader_module: c.VkShaderModule,
     pipeline_layout: c.VkPipelineLayout,
     render_pass: c.VkRenderPass,
+    graphics_pipeline: c.VkPipeline,
 
     _allocator: *mem.Allocator,
 
@@ -135,10 +136,11 @@ pub const Context = struct {
         var vertex_shader_module: c.VkShaderModule = undefined;
         var fragment_shader_module: c.VkShaderModule = undefined;
         var pipeline_layout: c.VkPipelineLayout = undefined;
-        try createGraphicsPipeline(
+        const graphics_pipeline = try createGraphicsPipeline(
             allocator,
             logical_device,
             swap_extent,
+            render_pass,
             &vertex_shader_module,
             &fragment_shader_module,
             &pipeline_layout,
@@ -166,11 +168,13 @@ pub const Context = struct {
             .fragment_shader_module = fragment_shader_module,
             .pipeline_layout = pipeline_layout,
             .render_pass = render_pass,
+            .graphics_pipeline = graphics_pipeline,
             ._allocator = allocator,
         };
     }
 
     pub fn deinit(self: *Self) void {
+        c.vkDestroyPipeline(self.logical_device, self.graphics_pipeline, null);
         c.vkDestroyPipelineLayout(self.logical_device, self.pipeline_layout, null);
         c.vkDestroyRenderPass(self.logical_device, self.render_pass, null);
         c.vkDestroyShaderModule(self.logical_device, self.vertex_shader_module, null);
@@ -717,10 +721,11 @@ fn createGraphicsPipeline(
     allocator: *mem.Allocator,
     device: c.VkDevice,
     swap_extent: c.VkExtent2D,
+    render_pass: c.VkRenderPass,
     vertex_shader_module: *c.VkShaderModule,
     fragment_shader_module: *c.VkShaderModule,
     pipeline_layout: *c.VkPipelineLayout,
-) !void {
+) !c.VkPipeline {
     const vertex_shader_code = try spv.readFile(allocator, vertex_shader_filename);
     const fragment_shader_code = try spv.readFile(allocator, fragment_shader_filename);
 
@@ -745,6 +750,11 @@ fn createGraphicsPipeline(
         .pSpecializationInfo = null,
         .pNext = null,
         .flags = 0,
+    };
+
+    const shader_stages = [_]c.VkPipelineShaderStageCreateInfo{
+        vertex_shader_stage_create_info,
+        fragment_shader_stage_create_info,
     };
 
     const vertex_input_info = c.VkPipelineVertexInputStateCreateInfo{
@@ -869,12 +879,42 @@ fn createGraphicsPipeline(
     ) != c.VkResult.VK_SUCCESS) {
         return error.UnableToCreatePipelineLayout;
     }
-}
 
-const ShaderStages = struct {
-    vertex_shader_stage_create_info: c.VkPipelineShaderStageCreateInfo,
-    fragment_shader_stage_create_info: c.VkPipelineShaderStageCreateInfo,
-};
+    var graphics_pipeline: c.VkPipeline = undefined;
+    const graphics_pipeline_create_info = c.VkGraphicsPipelineCreateInfo{
+        .sType = c.VkStructureType.VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+        .stageCount = shader_stages.len,
+        .pStages = &shader_stages,
+        .pVertexInputState = &vertex_input_info,
+        .pInputAssemblyState = &input_assembly,
+        .pViewportState = &viewport_state,
+        .pRasterizationState = &rasterizer,
+        .pMultisampleState = &multisampling,
+        .pDepthStencilState = null,
+        .pColorBlendState = &color_blending,
+        .pDynamicState = null,
+        .layout = pipeline_layout.*,
+        .renderPass = render_pass,
+        .basePipelineHandle = null, // VK_NULL_HANDLE
+        .basePipelineIndex = -1,
+        .pTessellationState = null,
+        .subpass = 0,
+        .pNext = null,
+        .flags = 0,
+    };
+    if (c.vkCreateGraphicsPipelines(
+        device,
+        null,
+        1,
+        &graphics_pipeline_create_info,
+        null,
+        &graphics_pipeline,
+    ) != c.VkResult.VK_SUCCESS) {
+        return error.UnableToCreateGraphicsPipeline;
+    }
+
+    return graphics_pipeline;
+}
 
 fn createRenderPass(device: c.VkDevice, swap_chain_image_format: c.VkFormat) !c.VkRenderPass {
     const color_attachment = c.VkAttachmentDescription{
