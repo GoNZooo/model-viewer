@@ -29,6 +29,16 @@ const SwapChainSupportDetails = struct {
 };
 
 pub const Context = struct {
+    pub const Semaphores = struct {
+        image_available_semaphore: c.VkSemaphore,
+        render_finished_semaphore: c.VkSemaphore,
+
+        pub fn destroy(self: Semaphores, device: c.VkDevice) void {
+            c.vkDestroySemaphore(device, self.image_available_semaphore, null);
+            c.vkDestroySemaphore(device, self.render_finished_semaphore, null);
+        }
+    };
+
     const Self = @This();
 
     physical_device: c.VkPhysicalDevice,
@@ -57,6 +67,7 @@ pub const Context = struct {
     swap_chain_frame_buffers: []c.VkFramebuffer,
     command_pool: c.VkCommandPool,
     command_buffers: []c.VkCommandBuffer,
+    semaphores: Semaphores,
 
     _allocator: *mem.Allocator,
 
@@ -182,6 +193,8 @@ pub const Context = struct {
             graphics_pipeline,
         );
 
+        const semaphores = try createSemaphores(logical_device);
+
         return Self{
             .instance = instance,
             .physical_device = physical_device,
@@ -209,11 +222,13 @@ pub const Context = struct {
             .swap_chain_frame_buffers = swap_chain_frame_buffers,
             .command_pool = command_pool,
             .command_buffers = command_buffers,
+            .semaphores = semaphores,
             ._allocator = allocator,
         };
     }
 
     pub fn deinit(self: *Self) void {
+        self.semaphores.destroy(self.logical_device);
         c.vkFreeCommandBuffers(
             self.logical_device,
             self.command_pool,
@@ -1010,14 +1025,24 @@ fn createRenderPass(device: c.VkDevice, swap_chain_image_format: c.VkFormat) !c.
     };
 
     var render_pass: c.VkRenderPass = undefined;
+    const dependency = c.VkSubpassDependency{
+        .srcSubpass = c.VK_SUBPASS_EXTERNAL,
+        .dstSubpass = 0,
+        .srcStageMask = c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        .dstStageMask = c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        .srcAccessMask = 0,
+        .dstAccessMask = c.VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
+            c.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+        .dependencyFlags = 0,
+    };
     const render_pass_create_info = c.VkRenderPassCreateInfo{
         .sType = c.VkStructureType.VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
         .attachmentCount = 1,
         .pAttachments = &color_attachment,
         .subpassCount = 1,
         .pSubpasses = &subpass,
-        .dependencyCount = 0,
-        .pDependencies = null,
+        .dependencyCount = 1,
+        .pDependencies = &dependency,
         .pNext = null,
         .flags = 0,
     };
@@ -1173,6 +1198,36 @@ fn beginCommandBuffers(
             return error.UnableToEndCommandBuffer;
         }
     }
+}
+
+fn createSemaphores(device: c.VkDevice) !Context.Semaphores {
+    var image_available_semaphore: c.VkSemaphore = undefined;
+    var render_finished_semaphore: c.VkSemaphore = undefined;
+    const semaphore_create_info = c.VkSemaphoreCreateInfo{
+        .sType = c.VkStructureType.VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+        .pNext = null,
+        .flags = 0,
+    };
+
+    if (c.vkCreateSemaphore(
+        device,
+        &semaphore_create_info,
+        null,
+        &image_available_semaphore,
+    ) != c.VkResult.VK_SUCCESS or
+        c.vkCreateSemaphore(
+        device,
+        &semaphore_create_info,
+        null,
+        &render_finished_semaphore,
+    ) != c.VkResult.VK_SUCCESS) {
+        return error.UnableToCreateSemaphore;
+    }
+
+    return Context.Semaphores{
+        .image_available_semaphore = image_available_semaphore,
+        .render_finished_semaphore = render_finished_semaphore,
+    };
 }
 
 const vertex_shader_filename = "shaders\\vertex.spv";

@@ -80,30 +80,57 @@ pub fn main() anyerror!void {
     while (c.glfwWindowShouldClose(window) == c.GLFW_FALSE) {
         // glfw.glfwSwapBuffers(window);
         c.glfwPollEvents();
+
+        try drawFrame(context);
     }
 }
 
-// \\uniform mat4 MVP;
-// \\
-const vertex_shader_source =
-    \\#version 330 core
-    \\
-    \\layout(location = 0) in vec4 position;
-    \\
-    \\void main(void) {
-    \\    gl_Position = position;
-    \\}
-;
+fn drawFrame(context: Context) !void {
+    var image_index: u32 = undefined;
+    _ = c.vkAcquireNextImageKHR(
+        context.logical_device,
+        context.swap_chain,
+        std.math.maxInt(u32),
+        context.semaphores.image_available_semaphore,
+        null,
+        &image_index,
+    );
+    debug.warn("image_index={}\tcontext.command_buffers.len={}\n", .{
+        image_index,
+        context.command_buffers.len,
+    });
+    debug.assert(image_index < context.command_buffers.len);
 
-const fragment_shader_source =
-    \\#version 330 core
-    \\
-    \\layout(location = 0) out vec4 color;
-    \\
-    \\void main(void) {
-    \\    color = vec4(1.0, 0.0, 0.0, 1.0);
-    \\}
-;
+    const signal_semaphores = [_]c.VkSemaphore{context.semaphores.render_finished_semaphore};
+    const wait_semaphores = [_]c.VkSemaphore{context.semaphores.image_available_semaphore};
+    const wait_stages = [_]c.VkPipelineStageFlags{c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
+    const submit_info = c.VkSubmitInfo{
+        .sType = c.VkStructureType.VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .waitSemaphoreCount = wait_semaphores.len,
+        .pWaitSemaphores = &wait_semaphores,
+        .pWaitDstStageMask = &wait_stages,
+        .commandBufferCount = 1,
+        .pCommandBuffers = &context.command_buffers[image_index],
+        .signalSemaphoreCount = signal_semaphores.len,
+        .pSignalSemaphores = &signal_semaphores,
+        .pNext = null,
+    };
 
-// #define VK_MAKE_VERSION(major, minor, patch) \
-//     (((major) << 22) | ((minor) << 12) | (patch))
+    if (c.vkQueueSubmit(context.queue, 1, &submit_info, null) != c.VkResult.VK_SUCCESS) {
+        return error.UnableToSubmitQueue;
+    }
+
+    const swap_chains = [_]c.VkSwapchainKHR{context.swap_chain};
+    const present_info = c.VkPresentInfoKHR{
+        .sType = c.VkStructureType.VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+        .waitSemaphoreCount = 1,
+        .pWaitSemaphores = &wait_semaphores,
+        .swapchainCount = swap_chains.len,
+        .pSwapchains = &swap_chains,
+        .pImageIndices = &image_index,
+        .pResults = null,
+        .pNext = null,
+    };
+
+    _ = c.vkQueuePresentKHR(context.present_queue, &present_info);
+}
