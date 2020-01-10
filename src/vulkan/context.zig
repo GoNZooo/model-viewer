@@ -174,6 +174,14 @@ pub const Context = struct {
             command_pool,
         );
 
+        try beginCommandBuffers(
+            command_buffers,
+            render_pass,
+            swap_chain_frame_buffers,
+            swap_extent,
+            graphics_pipeline,
+        );
+
         return Self{
             .instance = instance,
             .physical_device = physical_device,
@@ -1107,6 +1115,64 @@ fn createCommandBuffers(
     }
 
     return command_buffers;
+}
+
+fn beginCommandBuffers(
+    command_buffers: []c.VkCommandBuffer,
+    render_pass: c.VkRenderPass,
+    frame_buffers: []c.VkFramebuffer,
+    swap_extent: c.VkExtent2D,
+    graphics_pipeline: c.VkPipeline,
+) !void {
+    const clear_color = c.VkClearValue{
+        .color = c.VkClearColorValue{ .float32 = [_]f32{ 0.0, 0.0, 0.0, 0.0 } },
+    };
+    for (command_buffers) |command_buffer, i| {
+        const command_buffer_begin_info = c.VkCommandBufferBeginInfo{
+            .sType = c.VkStructureType.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+            .pInheritanceInfo = null,
+            .pNext = null,
+            .flags = 0,
+        };
+
+        if (c.vkBeginCommandBuffer(command_buffer, &command_buffer_begin_info) !=
+            c.VkResult.VK_SUCCESS)
+        {
+            return error.UnableToBeginCommandBuffer;
+        }
+        const render_pass_begin_info = c.VkRenderPassBeginInfo{
+            .sType = c.VkStructureType.VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+            .renderPass = render_pass,
+            .framebuffer = frame_buffers[i],
+            .renderArea = c.VkRect2D{
+                .offset = c.VkOffset2D{ .x = 0, .y = 0 },
+                .extent = swap_extent,
+            },
+            .clearValueCount = 1,
+            .pClearValues = &clear_color,
+            .pNext = null,
+        };
+
+        c.vkCmdBeginRenderPass(
+            command_buffer,
+            &render_pass_begin_info,
+            c.VkSubpassContents.VK_SUBPASS_CONTENTS_INLINE,
+        );
+
+        c.vkCmdBindPipeline(
+            command_buffer,
+            c.VkPipelineBindPoint.VK_PIPELINE_BIND_POINT_GRAPHICS,
+            graphics_pipeline,
+        );
+
+        c.vkCmdDraw(command_buffer, 3, 1, 0, 0);
+
+        c.vkCmdEndRenderPass(command_buffer);
+
+        if (c.vkEndCommandBuffer(command_buffer) != c.VkResult.VK_SUCCESS) {
+            return error.UnableToEndCommandBuffer;
+        }
+    }
 }
 
 const vertex_shader_filename = "shaders\\vertex.spv";
