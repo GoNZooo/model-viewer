@@ -151,7 +151,13 @@ pub const Context = struct {
             &pipeline_layout,
         );
 
-        const swap_chain_frame_buffers = try createFramebuffers(allocator);
+        const swap_chain_frame_buffers = try createFramebuffers(
+            allocator,
+            logical_device,
+            image_views,
+            render_pass,
+            swap_extent,
+        );
 
         return Self{
             .instance = instance,
@@ -183,6 +189,9 @@ pub const Context = struct {
     }
 
     pub fn deinit(self: *Self) void {
+        for (self.swap_chain_frame_buffers) |frame_buffer| {
+            c.vkDestroyFramebuffer(self.logical_device, frame_buffer, null);
+        }
         c.vkDestroyPipeline(self.logical_device, self.graphics_pipeline, null);
         c.vkDestroyPipelineLayout(self.logical_device, self.pipeline_layout, null);
         c.vkDestroyRenderPass(self.logical_device, self.render_pass, null);
@@ -983,9 +992,38 @@ fn createRenderPass(device: c.VkDevice, swap_chain_image_format: c.VkFormat) !c.
     return render_pass;
 }
 
-// @TODO: actually make this do what it needs
-fn createFramebuffers(allocator: *mem.Allocator) ![]c.VkFramebuffer {
-    var frame_buffers = try allocator.alloc(c.VkFramebuffer, 1);
+fn createFramebuffers(
+    allocator: *mem.Allocator,
+    device: c.VkDevice,
+    image_views: []c.VkImageView,
+    render_pass: c.VkRenderPass,
+    swap_extent: c.VkExtent2D,
+) ![]c.VkFramebuffer {
+    var frame_buffers = try allocator.alloc(c.VkFramebuffer, image_views.len);
+    for (image_views) |image_view, i| {
+        var attachments = [_]c.VkImageView{image_view};
+
+        const frame_buffer_create_info = c.VkFramebufferCreateInfo{
+            .sType = c.VkStructureType.VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+            .renderPass = render_pass,
+            .attachmentCount = 1,
+            .pAttachments = &attachments,
+            .width = swap_extent.width,
+            .height = swap_extent.height,
+            .layers = 1,
+            .pNext = null,
+            .flags = 0,
+        };
+
+        if (c.vkCreateFramebuffer(
+            device,
+            &frame_buffer_create_info,
+            null,
+            &frame_buffers[i],
+        ) != c.VkResult.VK_SUCCESS) {
+            return error.UnableToCreateFramebuffer;
+        }
+    }
 
     return frame_buffers;
 }
