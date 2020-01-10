@@ -96,7 +96,6 @@ pub const Context = struct {
             &physical_device_properties,
         );
         if (physical_device == null) return error.NoPhysicalDevice;
-        // c.vkGetPhysicalDeviceProperties(physical_device, &physical_device_properties);
         debug.warn("Found device with name '{}'\n", .{physical_device_properties.deviceName});
 
         var queue: c.VkQueue = undefined;
@@ -984,6 +983,7 @@ fn createRenderPass(device: c.VkDevice, swap_chain_image_format: c.VkFormat) !c.
     return render_pass;
 }
 
+// @TODO: actually make this do what it needs
 fn createFramebuffers(allocator: *mem.Allocator) ![]c.VkFramebuffer {
     var frame_buffers = try allocator.alloc(c.VkFramebuffer, 1);
 
