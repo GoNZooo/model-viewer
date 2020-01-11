@@ -29,13 +29,16 @@ const SwapChainSupportDetails = struct {
 };
 
 pub const Context = struct {
-    pub const Semaphores = struct {
+    pub const SyncObjects = struct {
         image_available_semaphore: c.VkSemaphore,
         render_finished_semaphore: c.VkSemaphore,
+        fence: c.VkFence,
+        in_flight: c.VkFence = null,
 
-        pub fn destroy(self: Semaphores, device: c.VkDevice) void {
+        pub fn destroy(self: @This(), device: c.VkDevice) void {
             c.vkDestroySemaphore(device, self.image_available_semaphore, null);
             c.vkDestroySemaphore(device, self.render_finished_semaphore, null);
+            c.vkDestroyFence(device, self.fence, null);
         }
     };
 
@@ -67,8 +70,7 @@ pub const Context = struct {
     swap_chain_frame_buffers: []c.VkFramebuffer,
     command_pool: c.VkCommandPool,
     command_buffers: []c.VkCommandBuffer,
-    // @TODO: create 1 of these for each frame that's supposed to be 'in flight'
-    semaphores: Semaphores,
+    sync_objects: []SyncObjects,
 
     _allocator: *mem.Allocator,
 
@@ -194,7 +196,7 @@ pub const Context = struct {
             graphics_pipeline,
         );
 
-        const semaphores = try createSemaphores(logical_device);
+        const sync_objects = try createSyncObjects(allocator, logical_device);
 
         return Self{
             .instance = instance,
@@ -223,13 +225,15 @@ pub const Context = struct {
             .swap_chain_frame_buffers = swap_chain_frame_buffers,
             .command_pool = command_pool,
             .command_buffers = command_buffers,
-            .semaphores = semaphores,
+            .sync_objects = sync_objects,
             ._allocator = allocator,
         };
     }
 
     pub fn deinit(self: *Self) void {
-        self.semaphores.destroy(self.logical_device);
+        for (self.sync_objects) |sync_objects| {
+            sync_objects.destroy(self.logical_device);
+        }
         c.vkFreeCommandBuffers(
             self.logical_device,
             self.command_pool,
@@ -257,6 +261,7 @@ pub const Context = struct {
         self._allocator.free(self.layers);
         self._allocator.free(self.queue_create_infos);
         self._allocator.free(self.command_buffers);
+        self._allocator.free(self.sync_objects);
         self.extensions.deinit();
     }
 };
@@ -1201,34 +1206,51 @@ fn beginCommandBuffers(
     }
 }
 
-fn createSemaphores(device: c.VkDevice) !Context.Semaphores {
-    var image_available_semaphore: c.VkSemaphore = undefined;
-    var render_finished_semaphore: c.VkSemaphore = undefined;
-    const semaphore_create_info = c.VkSemaphoreCreateInfo{
-        .sType = c.VkStructureType.VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
-        .pNext = null,
-        .flags = 0,
-    };
+fn createSyncObjects(allocator: *mem.Allocator, device: c.VkDevice) ![]Context.SyncObjects {
+    const semaphores = try allocator.alloc(Context.SyncObjects, number_of_frames);
+    for (semaphores) |*s| {
+        var image_available_semaphore: c.VkSemaphore = undefined;
+        var render_finished_semaphore: c.VkSemaphore = undefined;
+        var fence: c.VkFence = undefined;
+        const semaphore_create_info = c.VkSemaphoreCreateInfo{
+            .sType = c.VkStructureType.VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+            .pNext = null,
+            .flags = 0,
+        };
+        const fence_create_info = c.VkFenceCreateInfo{
+            .sType = c.VkStructureType.VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+            .pNext = null,
+            .flags = c.VK_FENCE_CREATE_SIGNALED_BIT,
+        };
 
-    if (c.vkCreateSemaphore(
-        device,
-        &semaphore_create_info,
-        null,
-        &image_available_semaphore,
-    ) != c.VkResult.VK_SUCCESS or
-        c.vkCreateSemaphore(
-        device,
-        &semaphore_create_info,
-        null,
-        &render_finished_semaphore,
-    ) != c.VkResult.VK_SUCCESS) {
-        return error.UnableToCreateSemaphore;
+        if (c.vkCreateSemaphore(
+            device,
+            &semaphore_create_info,
+            null,
+            &image_available_semaphore,
+        ) != c.VkResult.VK_SUCCESS or
+            c.vkCreateSemaphore(
+            device,
+            &semaphore_create_info,
+            null,
+            &render_finished_semaphore,
+        ) != c.VkResult.VK_SUCCESS or
+            c.vkCreateFence(
+            device,
+            &fence_create_info,
+            null,
+            &fence,
+        ) != c.VkResult.VK_SUCCESS) {
+            return error.UnableToCreateSyncObjects;
+        }
+        s.* = Context.SyncObjects{
+            .image_available_semaphore = image_available_semaphore,
+            .render_finished_semaphore = render_finished_semaphore,
+            .fence = fence,
+        };
     }
 
-    return Context.Semaphores{
-        .image_available_semaphore = image_available_semaphore,
-        .render_finished_semaphore = render_finished_semaphore,
-    };
+    return semaphores;
 }
 
 const vertex_shader_filename = "shaders\\vertex.spv";
@@ -1250,3 +1272,4 @@ const required_device_extensions_c: [*c]const [*c]const u8 = &[_][*c]const u8{
 
 const chosen_width: u32 = 1280;
 const chosen_height: u32 = 720;
+const number_of_frames: u8 = 2;

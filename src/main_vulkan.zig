@@ -77,34 +77,52 @@ pub fn main() anyerror!void {
     std.debug.warn("present_queue: {}\n", .{context.present_queue});
     std.debug.warn("surface: {}\n", .{context.surface});
 
+    var current_frame: u64 = 0;
     while (c.glfwWindowShouldClose(window) == c.GLFW_FALSE) {
         // glfw.glfwSwapBuffers(window);
         c.glfwPollEvents();
 
-        try drawFrame(context);
+        try drawFrame(context, &current_frame);
     }
 
     _ = c.vkDeviceWaitIdle(context.logical_device);
 }
 
-fn drawFrame(context: Context) !void {
+fn drawFrame(context: Context, current_frame: *u64) !void {
+    defer current_frame.* += 1;
+    const sync_objects_index = current_frame.* % context.sync_objects.len;
+    var sync_objects = context.sync_objects[sync_objects_index];
+    _ = c.vkWaitForFences(
+        context.logical_device,
+        1,
+        &sync_objects.fence,
+        c.VK_TRUE,
+        std.math.maxInt(u64),
+    );
     var image_index: u32 = undefined;
     _ = c.vkAcquireNextImageKHR(
         context.logical_device,
         context.swap_chain,
         std.math.maxInt(u32),
-        context.semaphores.image_available_semaphore,
+        sync_objects.image_available_semaphore,
         null,
         &image_index,
     );
-    debug.warn("image_index={}\tcontext.command_buffers.len={}\n", .{
-        image_index,
-        context.command_buffers.len,
-    });
+    if (sync_objects.in_flight != null) {
+        debug.warn("waiting for in flight semaphore\n", .{});
+        _ = c.vkWaitForFences(
+            context.logical_device,
+            1,
+            &sync_objects.in_flight,
+            c.VK_TRUE,
+            std.math.maxInt(u64),
+        );
+    }
+    sync_objects.in_flight = sync_objects.fence;
     debug.assert(image_index < context.command_buffers.len);
 
-    const signal_semaphores = [_]c.VkSemaphore{context.semaphores.render_finished_semaphore};
-    const wait_semaphores = [_]c.VkSemaphore{context.semaphores.image_available_semaphore};
+    const signal_semaphores = [_]c.VkSemaphore{sync_objects.render_finished_semaphore};
+    const wait_semaphores = [_]c.VkSemaphore{sync_objects.image_available_semaphore};
     const wait_stages = [_]c.VkPipelineStageFlags{c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
     const submit_info = c.VkSubmitInfo{
         .sType = c.VkStructureType.VK_STRUCTURE_TYPE_SUBMIT_INFO,
@@ -118,7 +136,13 @@ fn drawFrame(context: Context) !void {
         .pNext = null,
     };
 
-    if (c.vkQueueSubmit(context.queue, 1, &submit_info, null) != c.VkResult.VK_SUCCESS) {
+    _ = c.vkResetFences(context.logical_device, 1, &sync_objects.in_flight);
+    if (c.vkQueueSubmit(
+        context.queue,
+        1,
+        &submit_info,
+        sync_objects.in_flight,
+    ) != c.VkResult.VK_SUCCESS) {
         return error.UnableToSubmitQueue;
     }
 
