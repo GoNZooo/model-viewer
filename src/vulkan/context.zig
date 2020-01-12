@@ -44,6 +44,7 @@ pub const Context = struct {
 
     const Self = @This();
 
+    window: ?*c.GLFWwindow,
     physical_device: c.VkPhysicalDevice,
     physical_device_properties: c.VkPhysicalDeviceProperties,
     logical_device: c.VkDevice,
@@ -112,6 +113,7 @@ pub const Context = struct {
             &swap_extent,
             &physical_device_properties,
             &queue_family_indices,
+            window,
         );
         if (physical_device == null) return error.NoPhysicalDevice;
         debug.warn("Found device with name '{}'\n", .{physical_device_properties.deviceName});
@@ -133,7 +135,7 @@ pub const Context = struct {
 
         var swap_chain_image_format: c.VkFormat = undefined;
 
-        var swap_chain = try createSwapChain(
+        var swap_chain = try createSwapchain(
             allocator,
             swap_chain_support_details,
             surface_format,
@@ -148,7 +150,7 @@ pub const Context = struct {
         // This crashes compilation, "broken LLVM module found: Duplicate integer as switch case"
         // debug.warn("surface_format: {}\n", .{surface_format});
 
-        var swap_chain_images = try getSwapChainImages(allocator, logical_device, swap_chain);
+        var swap_chain_images = try getSwapchainImages(allocator, logical_device, swap_chain);
         var image_views = try createImageViews(
             allocator,
             swap_chain_images,
@@ -199,6 +201,7 @@ pub const Context = struct {
         const sync_objects = try createSyncObjects(allocator, logical_device);
 
         return Self{
+            .window = window,
             .instance = instance,
             .physical_device = physical_device,
             .physical_device_properties = physical_device_properties,
@@ -465,6 +468,7 @@ pub fn pickPhysicalDevice(
     swap_extent: *c.VkExtent2D,
     physical_device_properties: *c.VkPhysicalDeviceProperties,
     queue_family_indices: *QueueFamilyIndices,
+    window: ?*c.GLFWwindow,
 ) !c.VkPhysicalDevice {
     var physical_device: c.VkPhysicalDevice = null;
     var device_count: u32 = 0;
@@ -489,6 +493,7 @@ pub fn pickPhysicalDevice(
             swap_extent,
             physical_device_properties,
             queue_family_indices,
+            window,
         )) {
             physical_device = device;
             break;
@@ -516,6 +521,7 @@ fn isDeviceSuitable(
     swap_extent: *c.VkExtent2D,
     physical_device_properties: *c.VkPhysicalDeviceProperties,
     queue_family_indices: *QueueFamilyIndices,
+    window: ?*c.GLFWwindow,
 ) !bool {
     var device_features: c.VkPhysicalDeviceFeatures = undefined;
 
@@ -535,13 +541,14 @@ fn isDeviceSuitable(
 
     var swap_chain_adequate = false;
     if (has_device_extension_support) {
-        swap_chain_support_details.* = try querySwapChainSupport(
+        swap_chain_support_details.* = try querySwapchainSupport(
             allocator,
             device,
             surface,
             surface_format,
             present_mode,
             swap_extent,
+            window,
         );
         swap_chain_adequate = swap_chain_support_details.formats.len != 0 and
             swap_chain_support_details.present_modes.len != 0;
@@ -596,13 +603,14 @@ fn hasExtension(extension_name: []const u8, extension_properties: []c.VkExtensio
     return false;
 }
 
-fn querySwapChainSupport(
+fn querySwapchainSupport(
     allocator: *mem.Allocator,
     device: c.VkPhysicalDevice,
     surface: c.VkSurfaceKHR,
     surface_format: *c.VkSurfaceFormatKHR,
     present_mode: *c.VkPresentModeKHR,
     swap_extent: *c.VkExtent2D,
+    window: ?*c.GLFWwindow,
 ) !SwapChainSupportDetails {
     var details: SwapChainSupportDetails = undefined;
     _ = c.vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &details.capabilities);
@@ -616,6 +624,7 @@ fn querySwapChainSupport(
     var present_mode_count: u32 = undefined;
     _ = c.vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &present_mode_count, null);
     var present_modes = try allocator.alloc(c.VkPresentModeKHR, present_mode_count);
+    defer allocator.free(present_modes);
     _ = c.vkGetPhysicalDeviceSurfacePresentModesKHR(
         device,
         surface,
@@ -628,7 +637,7 @@ fn querySwapChainSupport(
 
     surface_format.* = chooseSwapSurfaceFormat(formats);
     present_mode.* = chooseSwapPresentMode(present_modes);
-    swap_extent.* = chooseSwapExtent(details.capabilities);
+    swap_extent.* = chooseSwapExtent(details.capabilities, window);
 
     return details;
 }
@@ -656,27 +665,19 @@ fn chooseSwapPresentMode(available_present_modes: []c.VkPresentModeKHR) c.VkPres
     return c.VkPresentModeKHR.VK_PRESENT_MODE_FIFO_KHR;
 }
 
-fn chooseSwapExtent(capabilities: c.VkSurfaceCapabilitiesKHR) c.VkExtent2D {
-    if (capabilities.currentExtent.width != std.math.maxInt(u32)) {
-        return capabilities.currentExtent;
-    } else {
-        var actual_extent = c.VkExtent2D{ .width = chosen_width, .height = chosen_height };
+fn chooseSwapExtent(capabilities: c.VkSurfaceCapabilitiesKHR, window: ?*c.GLFWwindow) c.VkExtent2D {
+    var width: c_int = undefined;
+    var height: c_int = undefined;
+    _ = c.glfwGetFramebufferSize(window, &width, &height);
+    var actual_extent = c.VkExtent2D{
+        .width = @intCast(u32, width),
+        .height = @intCast(u32, height),
+    };
 
-        actual_extent.width = std.math.max(
-            capabilities.minImageExtent.width,
-            std.math.min(capabilities.maxImageExtent.width, actual_extent.width),
-        );
-
-        actual_extent.height = std.math.max(
-            capabilities.minImageExtent.height,
-            std.math.min(capabilities.maxImageExtent.height, actual_extent.height),
-        );
-
-        return actual_extent;
-    }
+    return actual_extent;
 }
 
-fn createSwapChain(
+fn createSwapchain(
     allocator: *mem.Allocator,
     swap_chain_support_details: SwapChainSupportDetails,
     surface_format: c.VkSurfaceFormatKHR,
@@ -715,12 +716,10 @@ fn createSwapChain(
     swap_chain_image_format.* = surface_format.format;
 
     if (queue_family_indices.graphics_family.? != queue_family_indices.present_family.?) {
-        debug.warn("graphics & present family different\n", .{});
         create_info.imageSharingMode = c.VkSharingMode.VK_SHARING_MODE_CONCURRENT;
         create_info.queueFamilyIndexCount = 2;
         create_info.pQueueFamilyIndices = &queue_indices[0];
     } else {
-        debug.warn("graphics & present family NOT different\n", .{});
         create_info.imageSharingMode = c.VkSharingMode.VK_SHARING_MODE_EXCLUSIVE;
         // create_info.queueFamilyIndexCount = 0;
         // create_info.pQueueFamilyIndices = null;
@@ -742,7 +741,7 @@ fn createSwapChain(
     return swap_chain;
 }
 
-fn getSwapChainImages(
+fn getSwapchainImages(
     allocator: *mem.Allocator,
     logical_device: c.VkDevice,
     swap_chain: c.VkSwapchainKHR,
