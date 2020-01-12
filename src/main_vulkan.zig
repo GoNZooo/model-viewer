@@ -149,7 +149,7 @@ fn drawFrame(context: Context, current_frame: *u64) !void {
     const swap_chains = [_]c.VkSwapchainKHR{context.swap_chain};
     const present_info = c.VkPresentInfoKHR{
         .sType = c.VkStructureType.VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
-        .waitSemaphoreCount = 1,
+        .waitSemaphoreCount = wait_semaphores.len,
         .pWaitSemaphores = &wait_semaphores,
         .swapchainCount = swap_chains.len,
         .pSwapchains = &swap_chains,
