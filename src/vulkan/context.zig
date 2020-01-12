@@ -269,7 +269,6 @@ pub const Context = struct {
     }
 
     fn drawFrame(self: Context, current_frame: *u64) !void {
-        defer current_frame.* += 1;
         const sync_objects_index = current_frame.* % self.sync_objects.len;
         var sync_objects = self.sync_objects[sync_objects_index];
         _ = c.vkWaitForFences(
@@ -300,6 +299,7 @@ pub const Context = struct {
         }
         sync_objects.in_flight = sync_objects.fence;
         debug.assert(image_index < self.command_buffers.len);
+        defer current_frame.* += 1;
 
         const signal_semaphores = [_]c.VkSemaphore{sync_objects.render_finished_semaphore};
         const wait_semaphores = [_]c.VkSemaphore{sync_objects.image_available_semaphore};
