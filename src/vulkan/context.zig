@@ -608,7 +608,7 @@ fn isDeviceSuitable(
     _ = c.vkGetPhysicalDeviceFeatures(device, &device_features);
 
     queue_family_indices.* = try findQueueFamilies(allocator, device, surface);
-    const device_is_discrete_gpu = physical_device_properties.deviceType ==
+    const device_is_discrete_gpu = !needs_discrete_gpu or physical_device_properties.deviceType ==
         c.VkPhysicalDeviceType.VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU;
     const has_graphics_family = queue_family_indices.graphics_family != null;
     const has_present_family = queue_family_indices.present_family != null;
@@ -629,22 +629,14 @@ fn isDeviceSuitable(
             swap_extent,
             window,
         );
-        for (swap_chain_support_details.present_modes) |pm| {
-            std.debug.warn("pm={}\n", .{@enumToInt(pm)});
-        }
-        for (swap_chain_support_details.formats) |f| {
-            debug.warn("f={}\n", .{@enumToInt(f.format)});
-        }
         swap_chain_adequate = swap_chain_support_details.formats.len != 0 and
             swap_chain_support_details.present_modes.len != 0;
     }
 
-    if (needs_discrete_gpu) {
-        return device_is_discrete_gpu and has_graphics_family and has_present_family and
-            has_device_extension_support;
-    } else {
-        return has_graphics_family and has_present_family and has_device_extension_support;
-    }
+    const base_criteria_fulfilled = has_graphics_family and has_present_family and
+        has_device_extension_support and swap_chain_adequate;
+
+    return base_criteria_fulfilled and device_is_discrete_gpu;
 }
 
 fn hasDeviceExtensionSupport(
