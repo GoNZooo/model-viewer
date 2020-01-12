@@ -73,6 +73,7 @@ pub const Context = struct {
     command_buffers: []c.VkCommandBuffer,
     sync_objects: []SyncObjects,
 
+    framebuffer_resized: bool = false,
     _allocator: *mem.Allocator,
 
     pub fn init(allocator: *mem.Allocator, window: *c.GLFWwindow, needs_discrete_gpu: bool) !Self {
@@ -85,6 +86,7 @@ pub const Context = struct {
         if (c.glfwCreateWindowSurface(instance, window, null, &surface) != c.VkResult.VK_SUCCESS) {
             return error.UnableToCreateSurface;
         }
+        _ = c.glfwSetFramebufferSizeCallback(window, resizeCallback);
 
         var device_extensions = ExtensionInfo{
             .required = required_device_extensions,
@@ -94,7 +96,6 @@ pub const Context = struct {
         };
 
         var swap_chain_support_details: SwapChainSupportDetails = undefined;
-
         var surface_format: c.VkSurfaceFormatKHR = undefined;
         var present_mode: c.VkPresentModeKHR = undefined;
         var swap_extent: c.VkExtent2D = undefined;
@@ -1354,6 +1355,12 @@ fn createSyncObjects(allocator: *mem.Allocator, device: c.VkDevice) ![]Context.S
     }
 
     return semaphores;
+}
+
+extern fn resizeCallback(window: ?*c.GLFWwindow, width: c_int, height: c_int) void {
+    var context_pointer = c.glfwGetWindowUserPointer(window);
+    var context = @ptrCast(*Context, @alignCast(@alignOf(*Context), context_pointer));
+    context.framebuffer_resized = true;
 }
 
 const vertex_shader_filename = "shaders\\vertex.spv";
