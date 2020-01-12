@@ -52,7 +52,6 @@ pub fn main() anyerror!void {
     var window = c.glfwCreateWindow(1280, 720, "MView", null, null) orelse {
         std.debug.panic("unable to create window\n", .{});
     };
-    defer c.glfwDestroyWindow(window);
 
     var context = try Context.init(heap.page_allocator, window, needs_discrete_gpu);
     _ = c.glfwSetWindowUserPointer(window, &context);

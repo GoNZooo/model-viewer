@@ -266,6 +266,8 @@ pub const Context = struct {
         self._allocator.free(self.command_buffers);
         self._allocator.free(self.sync_objects);
         self.extensions.deinit();
+
+        c.glfwDestroyWindow(self.window);
     }
 
     fn drawFrame(self: Context, current_frame: *u64) !void {
@@ -627,6 +629,12 @@ fn isDeviceSuitable(
             swap_extent,
             window,
         );
+        for (swap_chain_support_details.present_modes) |pm| {
+            std.debug.warn("pm={}\n", .{@enumToInt(pm)});
+        }
+        for (swap_chain_support_details.formats) |f| {
+            debug.warn("f={}\n", .{@enumToInt(f.format)});
+        }
         swap_chain_adequate = swap_chain_support_details.formats.len != 0 and
             swap_chain_support_details.present_modes.len != 0;
     }
@@ -701,7 +709,7 @@ fn querySwapchainSupport(
     var present_mode_count: u32 = undefined;
     _ = c.vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &present_mode_count, null);
     var present_modes = try allocator.alloc(c.VkPresentModeKHR, present_mode_count);
-    defer allocator.free(present_modes);
+    errdefer allocator.free(present_modes);
     _ = c.vkGetPhysicalDeviceSurfacePresentModesKHR(
         device,
         surface,
