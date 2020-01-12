@@ -267,6 +267,83 @@ pub const Context = struct {
         self._allocator.free(self.sync_objects);
         self.extensions.deinit();
     }
+
+    fn drawFrame(self: Context, current_frame: *u64) !void {
+        defer current_frame.* += 1;
+        const sync_objects_index = current_frame.* % self.sync_objects.len;
+        var sync_objects = self.sync_objects[sync_objects_index];
+        _ = c.vkWaitForFences(
+            self.logical_device,
+            1,
+            &sync_objects.fence,
+            c.VK_TRUE,
+            std.math.maxInt(u64),
+        );
+        var image_index: u32 = undefined;
+        _ = c.vkAcquireNextImageKHR(
+            self.logical_device,
+            self.swap_chain,
+            std.math.maxInt(u32),
+            sync_objects.image_available_semaphore,
+            null,
+            &image_index,
+        );
+        if (sync_objects.in_flight != null) {
+            debug.warn("waiting for in flight semaphore\n", .{});
+            _ = c.vkWaitForFences(
+                self.logical_device,
+                1,
+                &sync_objects.in_flight,
+                c.VK_TRUE,
+                std.math.maxInt(u64),
+            );
+        }
+        sync_objects.in_flight = sync_objects.fence;
+        debug.assert(image_index < self.command_buffers.len);
+
+        const signal_semaphores = [_]c.VkSemaphore{sync_objects.render_finished_semaphore};
+        const wait_semaphores = [_]c.VkSemaphore{sync_objects.image_available_semaphore};
+        const wait_stages = [_]c.VkPipelineStageFlags{
+            c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        };
+        const submit_info = c.VkSubmitInfo{
+            .sType = c.VkStructureType.VK_STRUCTURE_TYPE_SUBMIT_INFO,
+            .waitSemaphoreCount = wait_semaphores.len,
+            .pWaitSemaphores = &wait_semaphores,
+            .pWaitDstStageMask = &wait_stages,
+            .commandBufferCount = 1,
+            .pCommandBuffers = &self.command_buffers[image_index],
+            .signalSemaphoreCount = signal_semaphores.len,
+            .pSignalSemaphores = &signal_semaphores,
+            .pNext = null,
+        };
+
+        _ = c.vkResetFences(self.logical_device, 1, &sync_objects.in_flight);
+        if (c.vkQueueSubmit(
+            self.queue,
+            1,
+            &submit_info,
+            sync_objects.in_flight,
+        ) != c.VkResult.VK_SUCCESS) {
+            return error.UnableToSubmitQueue;
+        }
+
+        const swap_chains = [_]c.VkSwapchainKHR{self.swap_chain};
+        const present_info = c.VkPresentInfoKHR{
+            .sType = c.VkStructureType.VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+            .waitSemaphoreCount = wait_semaphores.len,
+            .pWaitSemaphores = &wait_semaphores,
+            .swapchainCount = swap_chains.len,
+            .pSwapchains = &swap_chains,
+            .pImageIndices = &image_index,
+            .pResults = null,
+            .pNext = null,
+        };
+
+        _ = c.vkQueuePresentKHR(self.present_queue, &present_info);
+
+        _ = c.vkQueueWaitIdle(self.present_queue);
+    }
 };
 
 fn initVulkan(
