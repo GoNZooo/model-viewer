@@ -741,7 +741,7 @@ fn querySwapchainSupport(
 
     surface_format.* = chooseSwapSurfaceFormat(formats);
     present_mode.* = chooseSwapPresentMode(present_modes);
-    swap_extent.* = chooseSwapExtent(details.capabilities, window);
+    swap_extent.* = chooseSwapExtent(window);
 
     return details;
 }
@@ -769,7 +769,7 @@ fn chooseSwapPresentMode(available_present_modes: []c.VkPresentModeKHR) c.VkPres
     return c.VkPresentModeKHR.VK_PRESENT_MODE_FIFO_KHR;
 }
 
-fn chooseSwapExtent(capabilities: c.VkSurfaceCapabilitiesKHR, window: ?*c.GLFWwindow) c.VkExtent2D {
+fn chooseSwapExtent(window: ?*c.GLFWwindow) c.VkExtent2D {
     var width: c_int = undefined;
     var height: c_int = undefined;
     _ = c.glfwGetFramebufferSize(window, &width, &height);
