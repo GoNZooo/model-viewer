@@ -234,32 +234,17 @@ pub const Context = struct {
     }
 
     pub fn deinit(self: *Self) void {
+        self.cleanUpSwapchain();
+
         for (self.sync_objects) |sync_objects| {
             sync_objects.destroy(self.logical_device);
         }
-        c.vkFreeCommandBuffers(
-            self.logical_device,
-            self.command_pool,
-            @intCast(u32, self.command_buffers.len),
-            self.command_buffers.ptr,
-        );
         c.vkDestroyCommandPool(self.logical_device, self.command_pool, null);
-        for (self.swap_chain_frame_buffers) |frame_buffer| {
-            c.vkDestroyFramebuffer(self.logical_device, frame_buffer, null);
-        }
-        c.vkDestroyPipeline(self.logical_device, self.graphics_pipeline, null);
-        c.vkDestroyPipelineLayout(self.logical_device, self.pipeline_layout, null);
-        c.vkDestroyRenderPass(self.logical_device, self.render_pass, null);
         c.vkDestroyShaderModule(self.logical_device, self.vertex_shader_module, null);
         c.vkDestroyShaderModule(self.logical_device, self.fragment_shader_module, null);
-        for (self.image_views) |view| {
-            c.vkDestroyImageView(self.logical_device, view, null);
-        }
-        c.vkDestroySwapchainKHR(self.logical_device, self.swap_chain.?, null);
         c.vkDestroyDevice(self.logical_device, null);
         c.vkDestroySurfaceKHR(self.instance, self.surface, null);
         c.vkDestroyInstance(self.instance, null);
-        self._allocator.free(self.image_views);
         self._allocator.free(self.swap_chain_images);
         self._allocator.free(self.layers);
         self._allocator.free(self.queue_create_infos);
@@ -268,6 +253,28 @@ pub const Context = struct {
         self.extensions.deinit();
 
         c.glfwDestroyWindow(self.window);
+    }
+
+    fn cleanUpSwapchain(self: Context) void {
+        c.vkFreeCommandBuffers(
+            self.logical_device,
+            self.command_pool,
+            @intCast(u32, self.command_buffers.len),
+            self.command_buffers.ptr,
+        );
+        for (self.swap_chain_frame_buffers) |frame_buffer| {
+            c.vkDestroyFramebuffer(self.logical_device, frame_buffer, null);
+        }
+        c.vkDestroyPipeline(self.logical_device, self.graphics_pipeline, null);
+        c.vkDestroyPipelineLayout(self.logical_device, self.pipeline_layout, null);
+        c.vkDestroyRenderPass(self.logical_device, self.render_pass, null);
+        for (self.image_views) |view| {
+            c.vkDestroyImageView(self.logical_device, view, null);
+        }
+        c.vkDestroySwapchainKHR(self.logical_device, self.swap_chain.?, null);
+
+        self._allocator.free(self.image_views);
+        self._allocator.free(self.swap_chain_frame_buffers);
     }
 
     fn drawFrame(self: Context, current_frame: *u64) !void {
