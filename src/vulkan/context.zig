@@ -280,8 +280,9 @@ pub const Context = struct {
             c.VK_TRUE,
             std.math.maxInt(u64),
         );
+
         var image_index: u32 = undefined;
-        _ = c.vkAcquireNextImageKHR(
+        const acquire_result = c.vkAcquireNextImageKHR(
             self.logical_device,
             self.swap_chain,
             std.math.maxInt(u32),
@@ -289,6 +290,17 @@ pub const Context = struct {
             null,
             &image_index,
         );
+
+        switch (acquire_result) {
+            c.VkResult.VK_SUCCESS => {},
+            c.VkResult.VK_ERROR_OUT_OF_DATE_KHR => {
+                // try self.recreateSwapchain();
+
+                //return;
+            },
+            else => return error.UnableToAcquireNextImage,
+        }
+
         if (sync_objects.in_flight != null) {
             debug.warn("waiting for in flight semaphore\n", .{});
             _ = c.vkWaitForFences(
@@ -342,7 +354,15 @@ pub const Context = struct {
             .pNext = null,
         };
 
-        _ = c.vkQueuePresentKHR(self.present_queue, &present_info);
+        const present_result = c.vkQueuePresentKHR(self.present_queue, &present_info);
+
+        switch (present_result) {
+            c.VkResult.VK_SUCCESS => {},
+            c.VkResult.VK_ERROR_OUT_OF_DATE_KHR, c.VkResult.VK_SUBOPTIMAL_KHR => {
+                // try self.recreateSwapchain();
+            },
+            else => return error.UnableToAcquireNextImage,
+        }
 
         _ = c.vkQueueWaitIdle(self.present_queue);
     }
