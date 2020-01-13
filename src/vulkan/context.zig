@@ -53,7 +53,9 @@ pub const Context = struct {
     layers: []c.VkLayerProperties,
     instance: c.VkInstance,
     queue: c.VkQueue,
+    queue_family_indices: QueueFamilyIndices,
     present_queue: c.VkQueue,
+    present_mode: c.VkPresentModeKHR,
     surface: c.VkSurfaceKHR,
     swap_chain_support_details: SwapChainSupportDetails,
     swap_chain: c.VkSwapchainKHR,
@@ -212,6 +214,8 @@ pub const Context = struct {
             .layers = layers,
             .queue = queue,
             .present_queue = present_queue,
+            .present_mode = present_mode,
+            .queue_family_indices = queue_family_indices,
             .surface = surface,
             .swap_chain_support_details = swap_chain_support_details,
             .swap_chain = swap_chain,
@@ -249,7 +253,6 @@ pub const Context = struct {
         self._allocator.free(self.swap_chain_images);
         self._allocator.free(self.layers);
         self._allocator.free(self.queue_create_infos);
-        self._allocator.free(self.command_buffers);
         self._allocator.free(self.sync_objects);
         self.extensions.deinit();
 
@@ -274,11 +277,89 @@ pub const Context = struct {
         }
         c.vkDestroySwapchainKHR(self.logical_device, self.swap_chain.?, null);
 
-        self._allocator.free(self.image_views);
         self._allocator.free(self.swap_chain_frame_buffers);
+        self._allocator.free(self.command_buffers);
+        self._allocator.free(self.image_views);
     }
 
-    fn drawFrame(self: Context, current_frame: *u64) !void {
+    fn recreateSwapchain(self: *Context) !void {
+        var width: c_int = undefined;
+        var height: c_int = undefined;
+        _ = c.glfwGetFramebufferSize(self.window, &width, &height);
+        while (width == 0 or height == 0) {
+            _ = c.glfwGetFramebufferSize(self.window, &width, &height);
+            _ = c.glfwWaitEvents();
+        }
+
+        _ = c.vkDeviceWaitIdle(self.logical_device);
+
+        self.cleanUpSwapchain();
+
+        self.swap_extent = chooseSwapExtent(self.window);
+
+        self.swap_chain = try createSwapchain(
+            self._allocator,
+            self.swap_chain_support_details,
+            self.surface_format,
+            self.present_mode,
+            self.swap_extent,
+            self.surface,
+            self.physical_device,
+            self.logical_device,
+            self.queue_family_indices,
+            &self.swap_chain_image_format,
+        );
+
+        self.swap_chain_images = try getSwapchainImages(
+            self._allocator,
+            self.logical_device,
+            self.swap_chain,
+        );
+
+        self.image_views = try createImageViews(
+            self._allocator,
+            self.swap_chain_images,
+            self.swap_chain_image_format,
+            self.logical_device,
+        );
+
+        self.render_pass = try createRenderPass(self.logical_device, self.swap_chain_image_format);
+
+        self.graphics_pipeline = try createGraphicsPipeline(
+            self._allocator,
+            self.logical_device,
+            self.swap_extent,
+            self.render_pass,
+            &self.vertex_shader_module,
+            &self.fragment_shader_module,
+            &self.pipeline_layout,
+        );
+
+        self.swap_chain_frame_buffers = try createFramebuffers(
+            self._allocator,
+            self.logical_device,
+            self.image_views,
+            self.render_pass,
+            self.swap_extent,
+        );
+
+        self.command_buffers = try createCommandBuffers(
+            self._allocator,
+            self.logical_device,
+            self.swap_chain_frame_buffers,
+            self.command_pool,
+        );
+
+        try beginCommandBuffers(
+            self.command_buffers,
+            self.render_pass,
+            self.swap_chain_frame_buffers,
+            self.swap_extent,
+            self.graphics_pipeline,
+        );
+    }
+
+    fn drawFrame(self: *Context, current_frame: *u64) !void {
         const sync_objects_index = current_frame.* % self.sync_objects.len;
         var sync_objects = self.sync_objects[sync_objects_index];
         _ = c.vkWaitForFences(
@@ -302,9 +383,10 @@ pub const Context = struct {
         switch (acquire_result) {
             c.VkResult.VK_SUCCESS => {},
             c.VkResult.VK_ERROR_OUT_OF_DATE_KHR => {
-                // try self.recreateSwapchain();
+                debug.warn("Out of date after `Acquire`", .{});
+                try self.recreateSwapchain();
 
-                //return;
+                return;
             },
             else => return error.UnableToAcquireNextImage,
         }
@@ -364,10 +446,20 @@ pub const Context = struct {
 
         const present_result = c.vkQueuePresentKHR(self.present_queue, &present_info);
 
+        if (self.framebuffer_resized) {
+            debug.warn("Framebuffer resized\n", .{});
+            try self.recreateSwapchain();
+
+            self.framebuffer_resized = false;
+        }
+
         switch (present_result) {
             c.VkResult.VK_SUCCESS => {},
             c.VkResult.VK_ERROR_OUT_OF_DATE_KHR, c.VkResult.VK_SUBOPTIMAL_KHR => {
-                // try self.recreateSwapchain();
+                debug.warn("Out of date or suboptimal after `QueuePresent`\n", .{});
+                try self.recreateSwapchain();
+
+                self.framebuffer_resized = false;
             },
             else => return error.UnableToAcquireNextImage,
         }
