@@ -1472,6 +1472,4 @@ const required_device_extensions_c: [*c]const [*c]const u8 = &[_][*c]const u8{
     c.VK_KHR_SWAPCHAIN_EXTENSION_NAME,
 };
 
-const chosen_width: u32 = 1280;
-const chosen_height: u32 = 720;
 const number_of_frames: u8 = 2;
