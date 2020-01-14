@@ -518,7 +518,7 @@ fn make_version(major: u32, minor: u32, patch: u32) u32 {
     return (major << 22) | (minor << 12) | patch;
 }
 
-pub fn getExtensions(allocator: *mem.Allocator) !ExtensionInfo {
+fn getExtensions(allocator: *mem.Allocator) !ExtensionInfo {
     var required_extensions_count: u32 = undefined;
     var glfw_extensions_return: [*c]const [*c]const u8 = 0;
     glfw_extensions_return = c.glfwGetRequiredInstanceExtensions(&required_extensions_count);
@@ -554,7 +554,7 @@ pub fn getExtensions(allocator: *mem.Allocator) !ExtensionInfo {
     };
 }
 
-pub fn getLayers(allocator: *mem.Allocator) ![]c.VkLayerProperties {
+fn getLayers(allocator: *mem.Allocator) ![]c.VkLayerProperties {
     var layer_count: u32 = undefined;
     _ = c.vkEnumerateInstanceLayerProperties(&layer_count, null);
     var layers = try std.heap.page_allocator.alloc(c.VkLayerProperties, layer_count);
@@ -563,7 +563,7 @@ pub fn getLayers(allocator: *mem.Allocator) ![]c.VkLayerProperties {
     return layers;
 }
 
-pub fn findQueueFamilies(
+fn findQueueFamilies(
     allocator: *mem.Allocator,
     device: c.VkPhysicalDevice,
     surface: c.VkSurfaceKHR,
@@ -595,7 +595,7 @@ pub fn findQueueFamilies(
     return indices;
 }
 
-pub fn createLogicalDevice(
+fn createLogicalDevice(
     allocator: *mem.Allocator,
     physical_device: c.VkPhysicalDevice,
     queue: *c.VkQueue,
@@ -655,7 +655,7 @@ pub fn createLogicalDevice(
     return logical_device;
 }
 
-pub fn pickPhysicalDevice(
+fn pickPhysicalDevice(
     allocator: *mem.Allocator,
     instance: c.VkInstance,
     surface: c.VkSurfaceKHR,
@@ -702,7 +702,7 @@ pub fn pickPhysicalDevice(
     return physical_device;
 }
 
-pub fn zeroInit(comptime T: type) T {
+fn zeroInit(comptime T: type) T {
     var bytes = [_]u8{0} ** @sizeOf(T);
 
     return mem.bytesToValue(T, &bytes);
