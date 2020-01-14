@@ -1557,7 +1557,7 @@ fn createVertexBuffer(
     const memory_allocate_info = c.VkMemoryAllocateInfo{
         .sType = c.VkStructureType.VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
         .allocationSize = memory_requirements.size,
-        .memoryTypeIndex = findMemoryType(
+        .memoryTypeIndex = try findMemoryType(
             physical_device,
             memory_requirements.memoryTypeBits,
             c.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | c.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
@@ -1595,7 +1595,7 @@ fn findMemoryType(
     physical_device: c.VkPhysicalDevice,
     type_filter: u32,
     properties: c.VkMemoryPropertyFlags,
-) u32 {
+) !u32 {
     var memory_properties: c.VkPhysicalDeviceMemoryProperties = undefined;
     c.vkGetPhysicalDeviceMemoryProperties(physical_device, &memory_properties);
 
@@ -1608,7 +1608,7 @@ fn findMemoryType(
         }
     }
 
-    @panic("Failed to find suitable memory type");
+    return error.UnableToFindMemoryType;
 }
 
 extern fn resizeCallback(window: ?*c.GLFWwindow, width: c_int, height: c_int) void {
