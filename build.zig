@@ -5,6 +5,8 @@ pub fn build(b: *Builder) void {
     const exe = b.addExecutable("model-viewer", "src/main.zig");
     const vulkan_exe = b.addExecutable("model-viewer-vulkan", "src/main_vulkan.zig");
 
+    vulkan_exe.addPackagePath("xq3d", "./dependencies/zig-gamedev-lib/src/lib.zig");
+
     exe.addCSourceFile("dependencies/glad/src/glad.c", &[_][]const u8{"-std=c99"});
     exe.addIncludeDir("dependencies/glad/include");
     exe.addIncludeDir("dependencies/glfw/include");

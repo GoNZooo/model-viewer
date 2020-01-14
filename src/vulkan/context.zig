@@ -5,6 +5,52 @@ const debug = std.debug;
 const spv = @import("./spv.zig");
 const c = @import("../c.zig");
 
+const mq3d = @import("xq3d").math3d;
+const Vec2 = mq3d.Vec2;
+const Vec3 = mq3d.Vec3;
+const vec2 = mq3d.vec2;
+const vec3 = mq3d.vec3;
+
+const Vertex = struct {
+    position: Vec2,
+    color: Vec3,
+
+    pub fn bindingDescription() c.VkVertexInputBindingDescription {
+        const binding_description = c.VkVertexInputBindingDescription{
+            .binding = 0,
+            .stride = @sizeOf(@This()),
+            .inputRate = c.VkVertexInputRate.VK_VERTEX_INPUT_RATE_VERTEX,
+        };
+
+        return binding_description;
+    }
+
+    pub fn attributeDescriptions() [2]c.VkVertexInputAttributeDescription {
+        var attribute_descriptions = [2]c.VkVertexInputAttributeDescription{
+            c.VkVertexInputAttributeDescription{
+                .binding = 0,
+                .location = 0,
+                .format = c.VkFormat.VK_FORMAT_R32G32_SFLOAT,
+                .offset = @byteOffsetOf(@This(), "position"),
+            },
+            c.VkVertexInputAttributeDescription{
+                .binding = 0,
+                .location = 1,
+                .format = c.VkFormat.VK_FORMAT_R32G32B32_SFLOAT,
+                .offset = @byteOffsetOf(@This(), "color"),
+            },
+        };
+
+        return attribute_descriptions;
+    }
+};
+
+const test_vertices = [_]Vertex{
+    Vertex{ .position = vec2(0.0, -0.5), .color = vec3(1.0, 0.0, 0.0) },
+    Vertex{ .position = vec2(0.5, 0.5), .color = vec3(0.0, 1.0, 0.0) },
+    Vertex{ .position = vec2(-0.5, 0.5), .color = vec3(0.0, 0.0, 1.0) },
+};
+
 pub const ExtensionInfo = struct {
     required: []const []const u8,
     available: []c.VkExtensionProperties,
@@ -74,6 +120,8 @@ pub const Context = struct {
     command_pool: c.VkCommandPool,
     command_buffers: []c.VkCommandBuffer,
     sync_objects: []SyncObjects,
+    vertex_buffer: c.VkBuffer,
+    vertex_buffer_memory: c.VkDeviceMemory,
 
     framebuffer_resized: bool = false,
     _allocator: *mem.Allocator,
@@ -186,6 +234,15 @@ pub const Context = struct {
 
         const command_pool = try createCommandPool(logical_device, queue_family_indices);
 
+        var local_test_vertices = test_vertices;
+        var vertex_buffer_memory: c.VkDeviceMemory = undefined;
+        const vertex_buffer = try createVertexBuffer(
+            logical_device,
+            physical_device,
+            local_test_vertices[0..],
+            &vertex_buffer_memory,
+        );
+
         const command_buffers = try createCommandBuffers(
             allocator,
             logical_device,
@@ -199,6 +256,8 @@ pub const Context = struct {
             swap_chain_frame_buffers,
             swap_extent,
             graphics_pipeline,
+            vertex_buffer,
+            local_test_vertices[0..],
         );
 
         const sync_objects = try createSyncObjects(allocator, logical_device);
@@ -234,12 +293,17 @@ pub const Context = struct {
             .command_pool = command_pool,
             .command_buffers = command_buffers,
             .sync_objects = sync_objects,
+            .vertex_buffer = vertex_buffer,
+            .vertex_buffer_memory = vertex_buffer_memory,
             ._allocator = allocator,
         };
     }
 
     pub fn deinit(self: *Self) void {
         self.cleanUpSwapchain();
+
+        c.vkDestroyBuffer(self.logical_device, self.vertex_buffer, null);
+        c.vkFreeMemory(self.logical_device, self.vertex_buffer_memory, null);
 
         for (self.sync_objects) |sync_objects| {
             sync_objects.destroy(self.logical_device);
@@ -350,12 +414,15 @@ pub const Context = struct {
             self.command_pool,
         );
 
+        var local_test_vertices = test_vertices;
         try beginCommandBuffers(
             self.command_buffers,
             self.render_pass,
             self.swap_chain_frame_buffers,
             self.swap_extent,
             self.graphics_pipeline,
+            self.vertex_buffer,
+            local_test_vertices[0..],
         );
     }
 
@@ -1036,12 +1103,14 @@ fn createGraphicsPipeline(
         fragment_shader_stage_create_info,
     };
 
+    const binding_description = Vertex.bindingDescription();
+    const attribute_descriptions = Vertex.attributeDescriptions();
     const vertex_input_info = c.VkPipelineVertexInputStateCreateInfo{
         .sType = c.VkStructureType.VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-        .vertexBindingDescriptionCount = 0,
-        .pVertexBindingDescriptions = null,
-        .vertexAttributeDescriptionCount = 0,
-        .pVertexAttributeDescriptions = null,
+        .vertexBindingDescriptionCount = 1,
+        .pVertexBindingDescriptions = &binding_description,
+        .vertexAttributeDescriptionCount = @intCast(u32, attribute_descriptions.len),
+        .pVertexAttributeDescriptions = &attribute_descriptions,
         .pNext = null,
         .flags = 0,
     };
@@ -1350,6 +1419,8 @@ fn beginCommandBuffers(
     frame_buffers: []c.VkFramebuffer,
     swap_extent: c.VkExtent2D,
     graphics_pipeline: c.VkPipeline,
+    vertex_buffer: c.VkBuffer,
+    vertices: []Vertex,
 ) !void {
     const clear_color = c.VkClearValue{
         .color = c.VkClearColorValue{ .float32 = [_]f32{ 0.0, 0.0, 0.0, 0.0 } },
@@ -1392,7 +1463,11 @@ fn beginCommandBuffers(
             graphics_pipeline,
         );
 
-        c.vkCmdDraw(command_buffer, 3, 1, 0, 0);
+        const vertex_buffers = [_]c.VkBuffer{vertex_buffer};
+        const offsets = [_]c.VkDeviceSize{0};
+        c.vkCmdBindVertexBuffers(command_buffer, 0, 1, &vertex_buffers, &offsets);
+
+        c.vkCmdDraw(command_buffer, @intCast(u32, vertices.len), 1, 0, 0);
 
         c.vkCmdEndRenderPass(command_buffer);
 
@@ -1447,6 +1522,93 @@ fn createSyncObjects(allocator: *mem.Allocator, device: c.VkDevice) ![]Context.S
     }
 
     return semaphores;
+}
+
+fn createVertexBuffer(
+    device: c.VkDevice,
+    physical_device: c.VkPhysicalDevice,
+    vertices: []Vertex,
+    vertex_buffer_memory: *c.VkDeviceMemory,
+) !c.VkBuffer {
+    const buffer_create_info = c.VkBufferCreateInfo{
+        .sType = c.VkStructureType.VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .size = @sizeOf(Vertex) * vertices.len,
+        .usage = c.VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+        .sharingMode = c.VkSharingMode.VK_SHARING_MODE_EXCLUSIVE,
+        .queueFamilyIndexCount = 0,
+        .pQueueFamilyIndices = null,
+        .pNext = null,
+        .flags = 0,
+    };
+
+    var vertex_buffer: c.VkBuffer = undefined;
+    if (c.vkCreateBuffer(
+        device,
+        &buffer_create_info,
+        null,
+        &vertex_buffer,
+    ) != c.VkResult.VK_SUCCESS) {
+        return error.UnableToCreateVertexBuffer;
+    }
+
+    var memory_requirements: c.VkMemoryRequirements = undefined;
+    _ = c.vkGetBufferMemoryRequirements(device, vertex_buffer, &memory_requirements);
+
+    const memory_allocate_info = c.VkMemoryAllocateInfo{
+        .sType = c.VkStructureType.VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .allocationSize = memory_requirements.size,
+        .memoryTypeIndex = findMemoryType(
+            physical_device,
+            memory_requirements.memoryTypeBits,
+            c.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | c.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        ),
+        .pNext = null,
+    };
+
+    if (c.vkAllocateMemory(
+        device,
+        &memory_allocate_info,
+        null,
+        vertex_buffer_memory,
+    ) != c.VkResult.VK_SUCCESS) {
+        return error.UnableToAllocateVertexBufferMemory;
+    }
+
+    _ = c.vkBindBufferMemory(device, vertex_buffer, vertex_buffer_memory.*, 0);
+
+    var data: [*]u8 = undefined;
+    _ = c.vkMapMemory(
+        device,
+        vertex_buffer_memory.*,
+        0,
+        buffer_create_info.size,
+        0,
+        @ptrToInt(&data),
+    );
+    @memcpy(data, @ptrCast([*]u8, vertices.ptr), @intCast(usize, buffer_create_info.size));
+    _ = c.vkUnmapMemory(device, vertex_buffer_memory.*);
+
+    return vertex_buffer;
+}
+
+fn findMemoryType(
+    physical_device: c.VkPhysicalDevice,
+    type_filter: u32,
+    properties: c.VkMemoryPropertyFlags,
+) u32 {
+    var memory_properties: c.VkPhysicalDeviceMemoryProperties = undefined;
+    c.vkGetPhysicalDeviceMemoryProperties(physical_device, &memory_properties);
+
+    var i: u32 = 0;
+    while (i < memory_properties.memoryTypeCount) : (i += 1) {
+        if ((type_filter & (@intCast(u32, 1) << @intCast(u5, i))) != 0 and
+            (memory_properties.memoryTypes[i].propertyFlags & properties) == properties)
+        {
+            return i;
+        }
+    }
+
+    @panic("Failed to find suitable memory type");
 }
 
 extern fn resizeCallback(window: ?*c.GLFWwindow, width: c_int, height: c_int) void {
