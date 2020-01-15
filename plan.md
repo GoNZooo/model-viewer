@@ -4,8 +4,7 @@
 
 ### Technical pre-work that needs doing
 
-- [x] Sort out glad headers for use in zig
-- [ ] Find good candidate for GLM replacement for zig
+- [ ] Finish basic vulkan layer
 
 ### Dealing with OBJ files
 
