@@ -240,6 +240,8 @@ pub const Context = struct {
             logical_device,
             physical_device,
             local_test_vertices[0..],
+            command_pool,
+            queue,
             &vertex_buffer_memory,
         );
 
@@ -1528,12 +1530,118 @@ fn createVertexBuffer(
     device: c.VkDevice,
     physical_device: c.VkPhysicalDevice,
     vertices: []Vertex,
+    command_pool: c.VkCommandPool,
+    graphics_queue: c.VkQueue,
     vertex_buffer_memory: *c.VkDeviceMemory,
 ) !c.VkBuffer {
+    const size = @sizeOf(Vertex) * vertices.len;
+
+    // create staging buffer
+    var staging_buffer: c.VkBuffer = undefined;
+    var staging_buffer_memory: c.VkDeviceMemory = undefined;
+    try createBuffer(
+        device,
+        size,
+        physical_device,
+        c.VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        c.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+            c.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        &staging_buffer,
+        &staging_buffer_memory,
+    );
+
+    var data: [*]u8 = undefined;
+    _ = c.vkMapMemory(
+        device,
+        staging_buffer_memory,
+        0,
+        size,
+        0,
+        @ptrToInt(&data),
+    );
+    @memcpy(data, @ptrCast([*]u8, vertices.ptr), @intCast(usize, size));
+    _ = c.vkUnmapMemory(device, staging_buffer_memory);
+
+    var vertex_buffer: c.VkBuffer = undefined;
+    try createBuffer(
+        device,
+        size,
+        physical_device,
+        c.VK_BUFFER_USAGE_TRANSFER_DST_BIT | c.VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+        c.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        &vertex_buffer,
+        vertex_buffer_memory,
+    );
+
+    copyBuffer(device, staging_buffer, vertex_buffer, size, command_pool, graphics_queue);
+    c.vkDestroyBuffer(device, staging_buffer, null);
+    c.vkFreeMemory(device, staging_buffer_memory, null);
+
+    return vertex_buffer;
+}
+
+fn copyBuffer(
+    device: c.VkDevice,
+    source: c.VkBuffer,
+    destination: c.VkBuffer,
+    size: c.VkDeviceSize,
+    command_pool: c.VkCommandPool,
+    graphics_queue: c.VkQueue,
+) void {
+    const command_buffer_allocate_info = c.VkCommandBufferAllocateInfo{
+        .sType = c.VkStructureType.VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+        .level = c.VkCommandBufferLevel.VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+        .commandPool = command_pool,
+        .commandBufferCount = 1,
+        .pNext = null,
+    };
+
+    const command_buffer_begin_info = c.VkCommandBufferBeginInfo{
+        .sType = c.VkStructureType.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+        .flags = c.VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+        .pNext = null,
+        .pInheritanceInfo = null,
+    };
+
+    var command_buffer: c.VkCommandBuffer = undefined;
+    _ = c.vkAllocateCommandBuffers(device, &command_buffer_allocate_info, &command_buffer);
+
+    _ = c.vkBeginCommandBuffer(command_buffer, &command_buffer_begin_info);
+
+    const copy_region = c.VkBufferCopy{ .srcOffset = 0, .dstOffset = 0, .size = size };
+    _ = c.vkCmdCopyBuffer(command_buffer, source, destination, 1, &copy_region);
+    _ = c.vkEndCommandBuffer(command_buffer);
+
+    const submit_info = c.VkSubmitInfo{
+        .sType = c.VkStructureType.VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .commandBufferCount = 1,
+        .pCommandBuffers = &command_buffer,
+        .pNext = null,
+        .waitSemaphoreCount = 0,
+        .pWaitSemaphores = null,
+        .pWaitDstStageMask = null,
+        .signalSemaphoreCount = 0,
+        .pSignalSemaphores = null,
+    };
+
+    _ = c.vkQueueSubmit(graphics_queue, 1, &submit_info, null);
+    _ = c.vkQueueWaitIdle(graphics_queue);
+    c.vkFreeCommandBuffers(device, command_pool, 1, &command_buffer);
+}
+
+fn createBuffer(
+    device: c.VkDevice,
+    device_size: c.VkDeviceSize,
+    physical_device: c.VkPhysicalDevice,
+    usage: c.VkBufferUsageFlags,
+    properties: c.VkMemoryPropertyFlags,
+    buffer: *c.VkBuffer,
+    buffer_memory: *c.VkDeviceMemory,
+) !void {
     const buffer_create_info = c.VkBufferCreateInfo{
         .sType = c.VkStructureType.VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-        .size = @sizeOf(Vertex) * vertices.len,
-        .usage = c.VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+        .size = device_size,
+        .usage = usage,
         .sharingMode = c.VkSharingMode.VK_SHARING_MODE_EXCLUSIVE,
         .queueFamilyIndexCount = 0,
         .pQueueFamilyIndices = null,
@@ -1541,18 +1649,17 @@ fn createVertexBuffer(
         .flags = 0,
     };
 
-    var vertex_buffer: c.VkBuffer = undefined;
     if (c.vkCreateBuffer(
         device,
         &buffer_create_info,
         null,
-        &vertex_buffer,
+        buffer,
     ) != c.VkResult.VK_SUCCESS) {
-        return error.UnableToCreateVertexBuffer;
+        return error.UnableToCreateBuffer;
     }
 
     var memory_requirements: c.VkMemoryRequirements = undefined;
-    _ = c.vkGetBufferMemoryRequirements(device, vertex_buffer, &memory_requirements);
+    _ = c.vkGetBufferMemoryRequirements(device, buffer.*, &memory_requirements);
 
     const memory_allocate_info = c.VkMemoryAllocateInfo{
         .sType = c.VkStructureType.VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
@@ -1569,26 +1676,12 @@ fn createVertexBuffer(
         device,
         &memory_allocate_info,
         null,
-        vertex_buffer_memory,
+        buffer_memory,
     ) != c.VkResult.VK_SUCCESS) {
-        return error.UnableToAllocateVertexBufferMemory;
+        return error.UnableToAllocateBufferMemory;
     }
 
-    _ = c.vkBindBufferMemory(device, vertex_buffer, vertex_buffer_memory.*, 0);
-
-    var data: [*]u8 = undefined;
-    _ = c.vkMapMemory(
-        device,
-        vertex_buffer_memory.*,
-        0,
-        buffer_create_info.size,
-        0,
-        @ptrToInt(&data),
-    );
-    @memcpy(data, @ptrCast([*]u8, vertices.ptr), @intCast(usize, buffer_create_info.size));
-    _ = c.vkUnmapMemory(device, vertex_buffer_memory.*);
-
-    return vertex_buffer;
+    _ = c.vkBindBufferMemory(device, buffer.*, buffer_memory.*, 0);
 }
 
 fn findMemoryType(
