@@ -1573,14 +1573,21 @@ fn createVertexBuffer(
         vertex_buffer_memory,
     );
 
-    copyBuffer(device, staging_buffer, vertex_buffer, size, command_pool, graphics_queue);
+    copyBufferAndSubmitDestination(
+        device,
+        staging_buffer,
+        vertex_buffer,
+        size,
+        command_pool,
+        graphics_queue,
+    );
     c.vkDestroyBuffer(device, staging_buffer, null);
     c.vkFreeMemory(device, staging_buffer_memory, null);
 
     return vertex_buffer;
 }
 
-fn copyBuffer(
+fn copyBufferAndSubmitDestination(
     device: c.VkDevice,
     source: c.VkBuffer,
     destination: c.VkBuffer,
