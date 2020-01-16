@@ -12,37 +12,29 @@ const vec2 = mq3d.vec2;
 const vec3 = mq3d.vec3;
 
 const Vertex = struct {
+    const binding_description = c.VkVertexInputBindingDescription{
+        .binding = 0,
+        .stride = @sizeOf(@This()),
+        .inputRate = c.VkVertexInputRate.VK_VERTEX_INPUT_RATE_VERTEX,
+    };
+
+    const attribute_descriptions = [2]c.VkVertexInputAttributeDescription{
+        c.VkVertexInputAttributeDescription{
+            .binding = 0,
+            .location = 0,
+            .format = c.VkFormat.VK_FORMAT_R32G32_SFLOAT,
+            .offset = @byteOffsetOf(@This(), "position"),
+        },
+        c.VkVertexInputAttributeDescription{
+            .binding = 0,
+            .location = 1,
+            .format = c.VkFormat.VK_FORMAT_R32G32B32_SFLOAT,
+            .offset = @byteOffsetOf(@This(), "color"),
+        },
+    };
+
     position: Vec2,
     color: Vec3,
-
-    pub fn bindingDescription() c.VkVertexInputBindingDescription {
-        const binding_description = c.VkVertexInputBindingDescription{
-            .binding = 0,
-            .stride = @sizeOf(@This()),
-            .inputRate = c.VkVertexInputRate.VK_VERTEX_INPUT_RATE_VERTEX,
-        };
-
-        return binding_description;
-    }
-
-    pub fn attributeDescriptions() [2]c.VkVertexInputAttributeDescription {
-        var attribute_descriptions = [2]c.VkVertexInputAttributeDescription{
-            c.VkVertexInputAttributeDescription{
-                .binding = 0,
-                .location = 0,
-                .format = c.VkFormat.VK_FORMAT_R32G32_SFLOAT,
-                .offset = @byteOffsetOf(@This(), "position"),
-            },
-            c.VkVertexInputAttributeDescription{
-                .binding = 0,
-                .location = 1,
-                .format = c.VkFormat.VK_FORMAT_R32G32B32_SFLOAT,
-                .offset = @byteOffsetOf(@This(), "color"),
-            },
-        };
-
-        return attribute_descriptions;
-    }
 };
 
 const test_vertices = [_]Vertex{
@@ -1105,8 +1097,8 @@ fn createGraphicsPipeline(
         fragment_shader_stage_create_info,
     };
 
-    const binding_description = Vertex.bindingDescription();
-    const attribute_descriptions = Vertex.attributeDescriptions();
+    const binding_description = Vertex.binding_description;
+    const attribute_descriptions = Vertex.attribute_descriptions;
     const vertex_input_info = c.VkPipelineVertexInputStateCreateInfo{
         .sType = c.VkStructureType.VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
         .vertexBindingDescriptionCount = 1,
