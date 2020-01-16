@@ -678,7 +678,6 @@ fn createLogicalDevice(
     };
     var queue_priority: f32 = 1.0;
     queue_create_infos.* = try allocator.alloc(c.VkDeviceQueueCreateInfo, queue_families.len);
-    // defer allocator.free(queue_create_infos);
     for (queue_families) |qf, i| {
         queue_create_infos.*[i] = c.VkDeviceQueueCreateInfo{
             .sType = c.VkStructureType.VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
@@ -1528,7 +1527,7 @@ fn createVertexBuffer(
 ) !c.VkBuffer {
     const size = @sizeOf(Vertex) * vertices.len;
 
-    // create staging buffer
+    // create staging buffer, buffer that we deal with on the CPU side that is then copied to GPU
     var staging_buffer: c.VkBuffer = undefined;
     var staging_buffer_memory: c.VkDeviceMemory = undefined;
     try createBuffer(
@@ -1602,12 +1601,10 @@ fn copyBufferAndSubmitDestination(
         .pInheritanceInfo = null,
     };
 
+    const copy_region = c.VkBufferCopy{ .srcOffset = 0, .dstOffset = 0, .size = size };
     var command_buffer: c.VkCommandBuffer = undefined;
     _ = c.vkAllocateCommandBuffers(device, &command_buffer_allocate_info, &command_buffer);
-
     _ = c.vkBeginCommandBuffer(command_buffer, &command_buffer_begin_info);
-
-    const copy_region = c.VkBufferCopy{ .srcOffset = 0, .dstOffset = 0, .size = size };
     _ = c.vkCmdCopyBuffer(command_buffer, source, destination, 1, &copy_region);
     _ = c.vkEndCommandBuffer(command_buffer);
 
