@@ -38,10 +38,13 @@ const Vertex = struct {
 };
 
 const test_vertices = [_]Vertex{
-    Vertex{ .position = vec2(0.0, -0.5), .color = vec3(1.0, 0.0, 0.0) },
-    Vertex{ .position = vec2(0.5, 0.5), .color = vec3(0.0, 1.0, 0.0) },
-    Vertex{ .position = vec2(-0.5, 0.5), .color = vec3(0.0, 0.0, 1.0) },
+    Vertex{ .position = vec2(-0.5, -0.5), .color = vec3(1.0, 0.0, 0.0) },
+    Vertex{ .position = vec2(0.5, -0.5), .color = vec3(0.0, 1.0, 0.0) },
+    Vertex{ .position = vec2(0.5, 0.5), .color = vec3(0.0, 0.0, 1.0) },
+    Vertex{ .position = vec2(-0.5, 0.5), .color = vec3(1.0, 1.0, 1.0) },
 };
+
+const test_indices = [_]u16{ 0, 1, 2, 2, 3, 0 };
 
 pub const ExtensionInfo = struct {
     required: []const []const u8,
@@ -114,6 +117,8 @@ pub const Context = struct {
     sync_objects: []SyncObjects,
     vertex_buffer: c.VkBuffer,
     vertex_buffer_memory: c.VkDeviceMemory,
+    index_buffer: c.VkBuffer,
+    index_buffer_memory: c.VkDeviceMemory,
 
     framebuffer_resized: bool = false,
     _allocator: *mem.Allocator,
@@ -227,7 +232,9 @@ pub const Context = struct {
         const command_pool = try createCommandPool(logical_device, queue_family_indices);
 
         var local_test_vertices = test_vertices;
+        var local_test_indices = test_indices;
         var vertex_buffer_memory: c.VkDeviceMemory = undefined;
+        var index_buffer_memory: c.VkDeviceMemory = undefined;
         const vertex_buffer = try createVertexBuffer(
             logical_device,
             physical_device,
@@ -235,6 +242,14 @@ pub const Context = struct {
             command_pool,
             queue,
             &vertex_buffer_memory,
+        );
+        const index_buffer = try createIndexBuffer(
+            logical_device,
+            physical_device,
+            local_test_indices[0..],
+            command_pool,
+            queue,
+            &index_buffer_memory,
         );
 
         const command_buffers = try createCommandBuffers(
@@ -252,6 +267,8 @@ pub const Context = struct {
             graphics_pipeline,
             vertex_buffer,
             local_test_vertices[0..],
+            index_buffer,
+            local_test_indices[0..],
         );
 
         const sync_objects = try createSyncObjects(allocator, logical_device);
@@ -289,6 +306,8 @@ pub const Context = struct {
             .sync_objects = sync_objects,
             .vertex_buffer = vertex_buffer,
             .vertex_buffer_memory = vertex_buffer_memory,
+            .index_buffer = index_buffer,
+            .index_buffer_memory = index_buffer_memory,
             ._allocator = allocator,
         };
     }
@@ -298,6 +317,8 @@ pub const Context = struct {
 
         c.vkDestroyBuffer(self.logical_device, self.vertex_buffer, null);
         c.vkFreeMemory(self.logical_device, self.vertex_buffer_memory, null);
+        c.vkDestroyBuffer(self.logical_device, self.index_buffer, null);
+        c.vkFreeMemory(self.logical_device, self.index_buffer_memory, null);
 
         for (self.sync_objects) |sync_objects| {
             sync_objects.destroy(self.logical_device);
@@ -409,6 +430,7 @@ pub const Context = struct {
         );
 
         var local_test_vertices = test_vertices;
+        var local_test_indices = test_indices;
         try beginCommandBuffers(
             self.command_buffers,
             self.render_pass,
@@ -417,6 +439,8 @@ pub const Context = struct {
             self.graphics_pipeline,
             self.vertex_buffer,
             local_test_vertices[0..],
+            self.index_buffer,
+            local_test_indices[0..],
         );
     }
 
@@ -1414,6 +1438,8 @@ fn beginCommandBuffers(
     graphics_pipeline: c.VkPipeline,
     vertex_buffer: c.VkBuffer,
     vertices: []Vertex,
+    index_buffer: c.VkBuffer,
+    indices: []u16,
 ) !void {
     const clear_color = c.VkClearValue{
         .color = c.VkClearColorValue{ .float32 = [_]f32{ 0.0, 0.0, 0.0, 0.0 } },
@@ -1459,8 +1485,10 @@ fn beginCommandBuffers(
         const vertex_buffers = [_]c.VkBuffer{vertex_buffer};
         const offsets = [_]c.VkDeviceSize{0};
         c.vkCmdBindVertexBuffers(command_buffer, 0, 1, &vertex_buffers, &offsets);
+        c.vkCmdBindIndexBuffer(command_buffer, index_buffer, 0, c.VkIndexType.VK_INDEX_TYPE_UINT16);
 
-        c.vkCmdDraw(command_buffer, @intCast(u32, vertices.len), 1, 0, 0);
+        // c.vkCmdDraw(command_buffer, @intCast(u32, vertices.len), 1, 0, 0);
+        c.vkCmdDrawIndexed(command_buffer, @intCast(u32, indices.len), 1, 0, 0, 0);
 
         c.vkCmdEndRenderPass(command_buffer);
 
@@ -1576,6 +1604,67 @@ fn createVertexBuffer(
     c.vkFreeMemory(device, staging_buffer_memory, null);
 
     return vertex_buffer;
+}
+
+fn createIndexBuffer(
+    device: c.VkDevice,
+    physical_device: c.VkPhysicalDevice,
+    indices: []u16,
+    command_pool: c.VkCommandPool,
+    graphics_queue: c.VkQueue,
+    index_buffer_memory: *c.VkDeviceMemory,
+) !c.VkBuffer {
+    const size = @sizeOf(u16) * indices.len;
+
+    // create staging buffer, buffer that we deal with on the CPU side that is then copied to GPU
+    var staging_buffer: c.VkBuffer = undefined;
+    var staging_buffer_memory: c.VkDeviceMemory = undefined;
+    try createBuffer(
+        device,
+        size,
+        physical_device,
+        c.VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        c.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+            c.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        &staging_buffer,
+        &staging_buffer_memory,
+    );
+
+    var data: [*]u8 = undefined;
+    _ = c.vkMapMemory(
+        device,
+        staging_buffer_memory,
+        0,
+        size,
+        0,
+        @ptrToInt(&data),
+    );
+    @memcpy(data, @ptrCast([*]u8, indices.ptr), @intCast(usize, size));
+    _ = c.vkUnmapMemory(device, staging_buffer_memory);
+
+    var index_buffer: c.VkBuffer = undefined;
+    try createBuffer(
+        device,
+        size,
+        physical_device,
+        c.VK_BUFFER_USAGE_TRANSFER_DST_BIT | c.VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+        c.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        &index_buffer,
+        index_buffer_memory,
+    );
+
+    copyBufferAndSubmitDestination(
+        device,
+        staging_buffer,
+        index_buffer,
+        size,
+        command_pool,
+        graphics_queue,
+    );
+    c.vkDestroyBuffer(device, staging_buffer, null);
+    c.vkFreeMemory(device, staging_buffer_memory, null);
+
+    return index_buffer;
 }
 
 fn copyBufferAndSubmitDestination(
