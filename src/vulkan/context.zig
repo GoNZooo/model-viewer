@@ -7,9 +7,16 @@ const c = @import("../c.zig");
 
 const mq3d = @import("xq3d").math3d;
 const Vec2 = mq3d.Vec2;
-const Vec3 = mq3d.Vec3;
 const vec2 = mq3d.vec2;
+const Vec3 = mq3d.Vec3;
 const vec3 = mq3d.vec3;
+const Mat4 = mq3d.Mat4;
+
+const UniformBufferObject = extern struct {
+    model: Mat4,
+    view: Mat4,
+    projection: Mat4,
+};
 
 const Vertex = struct {
     const binding_description = c.VkVertexInputBindingDescription{
@@ -119,6 +126,11 @@ pub const Context = struct {
     vertex_buffer_memory: c.VkDeviceMemory,
     index_buffer: c.VkBuffer,
     index_buffer_memory: c.VkDeviceMemory,
+    descriptor_set_layout: c.VkDescriptorSetLayout,
+    uniform_buffers: []c.VkBuffer,
+    uniform_buffers_memory: []c.VkDeviceMemory,
+    descriptor_pool: c.VkDescriptorPool,
+    descriptor_sets: []c.VkDescriptorSet,
 
     framebuffer_resized: bool = false,
     _allocator: *mem.Allocator,
@@ -208,6 +220,8 @@ pub const Context = struct {
 
         const render_pass = try createRenderPass(logical_device, swap_chain_image_format);
 
+        const descriptor_set_layout = try createDescriptorSetLayout(logical_device);
+
         var vertex_shader_module: c.VkShaderModule = undefined;
         var fragment_shader_module: c.VkShaderModule = undefined;
         var pipeline_layout: c.VkPipelineLayout = undefined;
@@ -216,6 +230,7 @@ pub const Context = struct {
             logical_device,
             swap_extent,
             render_pass,
+            descriptor_set_layout,
             &vertex_shader_module,
             &fragment_shader_module,
             &pipeline_layout,
@@ -251,6 +266,29 @@ pub const Context = struct {
             queue,
             &index_buffer_memory,
         );
+        var uniform_buffers_memory: []c.VkDeviceMemory = undefined;
+        const uniform_buffers = try createUniformBuffers(
+            allocator,
+            logical_device,
+            physical_device,
+            swap_chain_images,
+            &uniform_buffers_memory,
+        );
+
+        const descriptor_pool = try createDescriptorPool(
+            allocator,
+            logical_device,
+            swap_chain_images,
+        );
+
+        const descriptor_sets = try createDescriptorSets(
+            allocator,
+            logical_device,
+            descriptor_pool,
+            swap_chain_images,
+            descriptor_set_layout,
+            uniform_buffers,
+        );
 
         const command_buffers = try createCommandBuffers(
             allocator,
@@ -269,6 +307,8 @@ pub const Context = struct {
             local_test_vertices[0..],
             index_buffer,
             local_test_indices[0..],
+            descriptor_sets,
+            pipeline_layout,
         );
 
         const sync_objects = try createSyncObjects(allocator, logical_device);
@@ -308,6 +348,11 @@ pub const Context = struct {
             .vertex_buffer_memory = vertex_buffer_memory,
             .index_buffer = index_buffer,
             .index_buffer_memory = index_buffer_memory,
+            .descriptor_set_layout = descriptor_set_layout,
+            .uniform_buffers = uniform_buffers,
+            .uniform_buffers_memory = uniform_buffers_memory,
+            .descriptor_pool = descriptor_pool,
+            .descriptor_sets = descriptor_sets,
             ._allocator = allocator,
         };
     }
@@ -315,6 +360,7 @@ pub const Context = struct {
     pub fn deinit(self: *Self) void {
         self.cleanUpSwapchain();
 
+        c.vkDestroyDescriptorSetLayout(self.logical_device, self.descriptor_set_layout, null);
         c.vkDestroyBuffer(self.logical_device, self.vertex_buffer, null);
         c.vkFreeMemory(self.logical_device, self.vertex_buffer_memory, null);
         c.vkDestroyBuffer(self.logical_device, self.index_buffer, null);
@@ -348,6 +394,11 @@ pub const Context = struct {
         for (self.swap_chain_frame_buffers) |frame_buffer| {
             c.vkDestroyFramebuffer(self.logical_device, frame_buffer, null);
         }
+        for (self.uniform_buffers) |ub, i| {
+            c.vkDestroyBuffer(self.logical_device, ub, null);
+            c.vkFreeMemory(self.logical_device, self.uniform_buffers_memory[i], null);
+        }
+        c.vkDestroyDescriptorPool(self.logical_device, self.descriptor_pool, null);
         c.vkDestroyPipeline(self.logical_device, self.graphics_pipeline, null);
         c.vkDestroyPipelineLayout(self.logical_device, self.pipeline_layout, null);
         c.vkDestroyRenderPass(self.logical_device, self.render_pass, null);
@@ -359,6 +410,8 @@ pub const Context = struct {
         self._allocator.free(self.swap_chain_frame_buffers);
         self._allocator.free(self.command_buffers);
         self._allocator.free(self.image_views);
+        self._allocator.free(self.uniform_buffers);
+        self._allocator.free(self.uniform_buffers_memory);
     }
 
     fn recreateSwapchain(self: *Context) !void {
@@ -409,6 +462,7 @@ pub const Context = struct {
             self.logical_device,
             self.swap_extent,
             self.render_pass,
+            self.descriptor_set_layout,
             &self.vertex_shader_module,
             &self.fragment_shader_module,
             &self.pipeline_layout,
@@ -420,6 +474,29 @@ pub const Context = struct {
             self.image_views,
             self.render_pass,
             self.swap_extent,
+        );
+
+        self.uniform_buffers = try createUniformBuffers(
+            self._allocator,
+            self.logical_device,
+            self.physical_device,
+            self.swap_chain_images,
+            &self.uniform_buffers_memory,
+        );
+
+        self.descriptor_pool = try createDescriptorPool(
+            self._allocator,
+            self.logical_device,
+            self.swap_chain_images,
+        );
+
+        self.descriptor_sets = try createDescriptorSets(
+            self._allocator,
+            self.logical_device,
+            self.descriptor_pool,
+            self.swap_chain_images,
+            self.descriptor_set_layout,
+            self.uniform_buffers,
         );
 
         self.command_buffers = try createCommandBuffers(
@@ -441,6 +518,8 @@ pub const Context = struct {
             local_test_vertices[0..],
             self.index_buffer,
             local_test_indices[0..],
+            self.descriptor_sets,
+            self.pipeline_layout,
         );
     }
 
@@ -475,6 +554,12 @@ pub const Context = struct {
             },
             else => return error.UnableToAcquireNextImage,
         }
+
+        const ubo = updateUniformBuffer(
+            self.logical_device,
+            image_index,
+            self.uniform_buffers_memory,
+        );
 
         if (sync_objects.in_flight != null) {
             debug.warn("waiting for in flight semaphore\n", .{});
@@ -546,12 +631,38 @@ pub const Context = struct {
 
                 self.framebuffer_resized = false;
             },
-            else => return error.UnableToAcquireNextImage,
+            else => return error.UnableToPresentQueue,
         }
 
         _ = c.vkQueueWaitIdle(self.present_queue);
     }
 };
+
+fn updateUniformBuffer(
+    device: c.VkDevice,
+    image_index: u32,
+    uniform_buffers_memory: []c.VkDeviceMemory,
+) UniformBufferObject {
+    var ubo = UniformBufferObject{
+        .model = Mat4.identity,
+        .view = Mat4.identity,
+        .projection = Mat4.identity,
+    };
+
+    var data: [*]u8 = undefined;
+    _ = c.vkMapMemory(
+        device,
+        uniform_buffers_memory[image_index],
+        0,
+        @sizeOf(UniformBufferObject),
+        0,
+        @ptrToInt(&data),
+    );
+    @memcpy(data, @ptrCast([*]u8, &ubo), @sizeOf(UniformBufferObject));
+    _ = c.vkUnmapMemory(device, uniform_buffers_memory[image_index]);
+
+    return ubo;
+}
 
 fn initVulkan(
     allocator: *mem.Allocator,
@@ -1085,6 +1196,7 @@ fn createGraphicsPipeline(
     device: c.VkDevice,
     swap_extent: c.VkExtent2D,
     render_pass: c.VkRenderPass,
+    descriptor_set_layout: c.VkDescriptorSetLayout,
     vertex_shader_module: *c.VkShaderModule,
     fragment_shader_module: *c.VkShaderModule,
     pipeline_layout: *c.VkPipelineLayout,
@@ -1228,8 +1340,8 @@ fn createGraphicsPipeline(
 
     const pipeline_layout_create_info = c.VkPipelineLayoutCreateInfo{
         .sType = c.VkStructureType.VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-        .setLayoutCount = 0,
-        .pSetLayouts = null,
+        .setLayoutCount = 1,
+        .pSetLayouts = &descriptor_set_layout,
         .pushConstantRangeCount = 0,
         .pPushConstantRanges = null,
         .pNext = null,
@@ -1440,6 +1552,8 @@ fn beginCommandBuffers(
     vertices: []Vertex,
     index_buffer: c.VkBuffer,
     indices: []u16,
+    descriptor_sets: []c.VkDescriptorSet,
+    pipeline_layout: c.VkPipelineLayout,
 ) !void {
     const clear_color = c.VkClearValue{
         .color = c.VkClearColorValue{ .float32 = [_]f32{ 0.0, 0.0, 0.0, 0.0 } },
@@ -1486,6 +1600,16 @@ fn beginCommandBuffers(
         const offsets = [_]c.VkDeviceSize{0};
         c.vkCmdBindVertexBuffers(command_buffer, 0, 1, &vertex_buffers, &offsets);
         c.vkCmdBindIndexBuffer(command_buffer, index_buffer, 0, c.VkIndexType.VK_INDEX_TYPE_UINT16);
+        c.vkCmdBindDescriptorSets(
+            command_buffer,
+            c.VkPipelineBindPoint.VK_PIPELINE_BIND_POINT_GRAPHICS,
+            pipeline_layout,
+            0,
+            1,
+            &descriptor_sets[i],
+            0,
+            null,
+        );
 
         // c.vkCmdDraw(command_buffer, @intCast(u32, vertices.len), 1, 0, 0);
         c.vkCmdDrawIndexed(command_buffer, @intCast(u32, indices.len), 1, 0, 0, 0);
@@ -1667,6 +1791,116 @@ fn createIndexBuffer(
     return index_buffer;
 }
 
+fn createUniformBuffers(
+    allocator: *mem.Allocator,
+    logical_device: c.VkDevice,
+    physical_device: c.VkPhysicalDevice,
+    swap_chain_images: []c.VkImage,
+    uniform_buffers_memory: *[]c.VkDeviceMemory,
+) ![]c.VkBuffer {
+    const buffer_size: c.VkDeviceSize = @sizeOf(UniformBufferObject);
+
+    var uniform_buffers = try allocator.alloc(c.VkBuffer, swap_chain_images.len);
+    uniform_buffers_memory.* = try allocator.alloc(c.VkDeviceMemory, swap_chain_images.len);
+
+    for (uniform_buffers) |*ub, i| {
+        try createBuffer(
+            logical_device,
+            buffer_size,
+            physical_device,
+            c.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+            c.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | c.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            ub,
+            &uniform_buffers_memory.*[i],
+        );
+    }
+
+    return uniform_buffers;
+}
+
+fn createDescriptorPool(
+    allocator: *mem.Allocator,
+    device: c.VkDevice,
+    swap_chain_images: []c.VkImage,
+) !c.VkDescriptorPool {
+    const pool_size = c.VkDescriptorPoolSize{
+        .type = c.VkDescriptorType.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+        .descriptorCount = @intCast(u32, swap_chain_images.len),
+    };
+
+    const pool_create_info = c.VkDescriptorPoolCreateInfo{
+        .sType = c.VkStructureType.VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+        .poolSizeCount = 1,
+        .pPoolSizes = &pool_size,
+        .pNext = null,
+        .flags = 0,
+        .maxSets = @intCast(u32, swap_chain_images.len),
+    };
+
+    var descriptor_pool: c.VkDescriptorPool = undefined;
+    if (c.vkCreateDescriptorPool(device, &pool_create_info, null, &descriptor_pool) != c.VkResult.VK_SUCCESS) {
+        return error.UnableToCreateDescriptorPool;
+    }
+
+    return descriptor_pool;
+}
+
+fn createDescriptorSets(
+    allocator: *mem.Allocator,
+    device: c.VkDevice,
+    descriptor_pool: c.VkDescriptorPool,
+    swap_chain_images: []c.VkImage,
+    descriptor_set_layout: c.VkDescriptorSetLayout,
+    uniform_buffers: []c.VkBuffer,
+) ![]c.VkDescriptorSet {
+    var descriptor_sets = try allocator.alloc(c.VkDescriptorSet, swap_chain_images.len);
+    var layouts = try allocator.alloc(c.VkDescriptorSetLayout, swap_chain_images.len);
+    for (layouts) |*l| {
+        l.* = descriptor_set_layout;
+    }
+
+    const allocation_info = c.VkDescriptorSetAllocateInfo{
+        .sType = c.VkStructureType.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .descriptorPool = descriptor_pool,
+        .descriptorSetCount = @intCast(u32, descriptor_sets.len),
+        .pSetLayouts = layouts.ptr,
+        .pNext = null,
+    };
+
+    if (c.vkAllocateDescriptorSets(
+        device,
+        &allocation_info,
+        descriptor_sets.ptr,
+    ) != c.VkResult.VK_SUCCESS) {
+        return error.UnableToAllocateDescriptorSets;
+    }
+
+    for (descriptor_sets) |ds, i| {
+        const buffer_info = c.VkDescriptorBufferInfo{
+            .buffer = uniform_buffers[i],
+            .offset = 0,
+            .range = @sizeOf(UniformBufferObject),
+        };
+
+        const descriptor_write = c.VkWriteDescriptorSet{
+            .sType = c.VkStructureType.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .dstSet = ds,
+            .dstBinding = 0,
+            .dstArrayElement = 0,
+            .descriptorType = c.VkDescriptorType.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+            .descriptorCount = 1,
+            .pBufferInfo = &buffer_info,
+            .pImageInfo = null,
+            .pTexelBufferView = null,
+            .pNext = null,
+        };
+
+        c.vkUpdateDescriptorSets(device, 1, &descriptor_write, 0, null);
+    }
+
+    return descriptor_sets;
+}
+
 fn copyBufferAndSubmitDestination(
     device: c.VkDevice,
     source: c.VkBuffer,
@@ -1787,6 +2021,36 @@ fn findMemoryType(
     }
 
     return error.UnableToFindMemoryType;
+}
+
+fn createDescriptorSetLayout(device: c.VkDevice) !c.VkDescriptorSetLayout {
+    const ubo_layout_binding = c.VkDescriptorSetLayoutBinding{
+        .binding = 0,
+        .descriptorType = c.VkDescriptorType.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+        .descriptorCount = 1,
+        .stageFlags = c.VK_SHADER_STAGE_VERTEX_BIT,
+        .pImmutableSamplers = null,
+    };
+
+    var descriptor_set_layout: c.VkDescriptorSetLayout = undefined;
+    const layout_create_info = c.VkDescriptorSetLayoutCreateInfo{
+        .sType = c.VkStructureType.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        .bindingCount = 1,
+        .pBindings = &ubo_layout_binding,
+        .pNext = null,
+        .flags = 0,
+    };
+
+    if (c.vkCreateDescriptorSetLayout(
+        device,
+        &layout_create_info,
+        null,
+        &descriptor_set_layout,
+    ) != c.VkResult.VK_SUCCESS) {
+        return error.UnableToCreateDescriptorSetLayout;
+    }
+
+    return descriptor_set_layout;
 }
 
 extern fn resizeCallback(window: ?*c.GLFWwindow, width: c_int, height: c_int) void {
