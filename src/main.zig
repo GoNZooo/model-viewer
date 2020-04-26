@@ -8,20 +8,20 @@ const glfw = @cImport({
     @cInclude("GLFW/glfw3.h");
 });
 
-const glad = @import("./glad.zig");
+const glad = @import("glad.zig");
 
-extern fn errorCallback(err: c_int, description: [*c]const u8) void {
+fn errorCallback(err: c_int, description: [*c]const u8) callconv(.C) void {
     var message: [*:0]const u8 = description;
     std.debug.panic("GLFW error ({}): {s}\n", .{ err, message });
 }
 
-extern fn handleKey(
+fn handleKey(
     window: ?*glfw.GLFWwindow,
     key: c_int,
     scancode: c_int,
     action: c_int,
     mods: c_int,
-) void {
+) callconv(.C) void {
     if (action != glfw.GLFW_PRESS) return;
 
     switch (key) {

@@ -2053,7 +2053,7 @@ fn createDescriptorSetLayout(device: c.VkDevice) !c.VkDescriptorSetLayout {
     return descriptor_set_layout;
 }
 
-extern fn resizeCallback(window: ?*c.GLFWwindow, width: c_int, height: c_int) void {
+fn resizeCallback(window: ?*c.GLFWwindow, width: c_int, height: c_int) callconv(.C) void {
     var context_pointer = c.glfwGetWindowUserPointer(window);
     var context = @ptrCast(*Context, @alignCast(@alignOf(*Context), context_pointer));
     context.framebuffer_resized = true;
