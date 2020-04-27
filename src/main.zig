@@ -71,44 +71,26 @@ pub fn main() anyerror!void {
 
     var vertex_buffer: glad.GLuint = undefined;
     glad.glGenBuffers(1, &vertex_buffer);
-    printGlError(
-        "vertex genbuffer",
-        ErrorPrintOptions{ .warn_on_no_error = false, .panic_on_error = true },
-    );
+    panicOnError("vertex genbuffer");
     glad.glBindBuffer(glad.GL_ARRAY_BUFFER, vertex_buffer);
-    printGlError(
-        "vertex bindbuffer",
-        ErrorPrintOptions{ .warn_on_no_error = false, .panic_on_error = true },
-    );
+    panicOnError("vertex bindbuffer");
     glad.glBufferData(
         glad.GL_ARRAY_BUFFER,
         @sizeOf(f32) * vertices.len,
         &vertices,
         glad.GL_STATIC_DRAW,
     );
-    printGlError(
-        "vertex bufferdata",
-        ErrorPrintOptions{ .warn_on_no_error = false, .panic_on_error = true },
-    );
+    panicOnError("vertex bufferdata");
 
     var vertex_array_object: glad.GLuint = undefined;
     glad.glGenVertexArrays(1, &vertex_array_object);
-    printGlError(
-        "gen vertex array object",
-        ErrorPrintOptions{ .warn_on_no_error = false, .panic_on_error = true },
-    );
+    panicOnError("gen vertex array object");
     glad.glBindVertexArray(vertex_array_object);
-    printGlError(
-        "bind vertex array object",
-        ErrorPrintOptions{ .warn_on_no_error = false, .panic_on_error = true },
-    );
+    panicOnError("bind vertex array object");
     defer glad.glDeleteVertexArrays(1, &vertex_array_object);
 
     glad.glEnableVertexAttribArray(0);
-    printGlError(
-        "vertex enable attrib array",
-        ErrorPrintOptions{ .warn_on_no_error = false, .panic_on_error = true },
-    );
+    panicOnError("vertex enable attrib array");
     glad.glVertexAttribPointer(
         0,
         2,
@@ -117,17 +99,11 @@ pub fn main() anyerror!void {
         2 * @sizeOf(f32),
         null,
     );
-    printGlError(
-        "vertex attribpointer",
-        ErrorPrintOptions{ .warn_on_no_error = false, .panic_on_error = true },
-    );
+    panicOnError("vertex attribpointer");
 
     var program = try Program.create(vertex_shader_source, fragment_shader_source);
     program.use();
-    printGlError(
-        "use shaders",
-        ErrorPrintOptions{ .warn_on_no_error = false, .panic_on_error = true },
-    );
+    panicOnError("use shaders");
     defer program.delete();
 
     var gl_error: c_uint = glad.glGetError();
@@ -135,15 +111,11 @@ pub fn main() anyerror!void {
 
     while (glfw.glfwWindowShouldClose(window) == glad.GL_FALSE) {
         glad.glClear(glad.GL_COLOR_BUFFER_BIT);
-        printGlError(
-            "clear",
-            ErrorPrintOptions{ .warn_on_no_error = false, .panic_on_error = true },
-        );
+        panicOnError("clear");
 
         glad.glDrawArrays(glad.GL_TRIANGLES, 0, 3);
-        printGlError(
+        panicOnError(
             "drawArrays",
-            ErrorPrintOptions{ .warn_on_no_error = false, .panic_on_error = true },
         );
 
         glfw.glfwSwapBuffers(window);
@@ -156,6 +128,13 @@ const ErrorPrintOptions = struct {
     warn_on_no_error: bool,
     panic_on_error: bool,
 };
+
+fn panicOnError(comptime label: []const u8) void {
+    printGlError(
+        label,
+        ErrorPrintOptions{ .warn_on_no_error = false, .panic_on_error = true },
+    );
+}
 
 fn printGlError(comptime label: []const u8, comptime options: ErrorPrintOptions) void {
     var gl_error = glad.glGetError();
