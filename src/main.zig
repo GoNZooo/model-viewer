@@ -1,6 +1,8 @@
 const std = @import("std");
 const obj = @import("./obj.zig");
 const mem = std.mem;
+const heap = std.heap;
+const debug = std.debug;
 
 const Program = @import("./program.zig").Program;
 
@@ -39,14 +41,14 @@ pub fn main() anyerror!void {
 
     glfw.glfwWindowHint(glfw.GLFW_CONTEXT_VERSION_MAJOR, 4);
     glfw.glfwWindowHint(glfw.GLFW_CONTEXT_VERSION_MINOR, 5);
-    // glfw.glfwWindowHint(glfw.GLFW_OPENGL_FORWARD_COMPAT, glad.GL_TRUE);
     glfw.glfwWindowHint(glfw.GLFW_OPENGL_DEBUG_CONTEXT, glad.GL_TRUE);
     glfw.glfwWindowHint(glfw.GLFW_OPENGL_PROFILE, glfw.GLFW_OPENGL_CORE_PROFILE);
+    // glfw.glfwWindowHint(glfw.GLFW_OPENGL_FORWARD_COMPAT, glad.GL_TRUE);
     // glfw.glfwWindowHint(glfw.GLFW_DEPTH_BITS, 0);
     // glfw.glfwWindowHint(glfw.GLFW_STENCIL_BITS, 8);
     // glfw.glfwWindowHint(glfw.GLFW_RESIZABLE, glad.GL_FALSE);
 
-    var window = glfw.glfwCreateWindow(1280, 720, "MView", null, null) orelse {
+    var window = glfw.glfwCreateWindow(1280, 1280, "MView", null, null) orelse {
         std.debug.panic("unable to create window\n", .{});
     };
     defer glfw.glfwDestroyWindow(window);
@@ -67,7 +69,46 @@ pub fn main() anyerror!void {
     glfw.glfwGetFramebufferSize(window, &width, &height);
     std.debug.warn("viewport: {}x{}\n", .{ width, height });
 
-    var vertices = [_]f32{ -0.5, -0.5, 0.5, 0.5, 0.5, -0.5 };
+    const rough_sphere_on_cube = try obj.parseObj(
+        heap.page_allocator,
+        obj.rough_sphere_on_cube_data,
+    );
+
+    const teddy = try obj.parseObj(
+        heap.page_allocator,
+        obj.teddy_data,
+    );
+
+    // const vertices = [_]f32{ -0.5, -0.5, 0.5, -0.5, 0.5, 0.5, -0.5, 0.5 };
+    // var vs = [_]f32{
+    //     -0.5, -0.5, 0.0, 0.5, -0.5, 0.0, 0.5, 0.5, 0.0, -0.5, 0.5, 0.0,
+    // };
+    // var vs = [_]obj.Vertex(4, f32){
+    //     .{ .data = [4]f32{ -0.5, -0.5, 0.0, 1.0 } },
+    //     .{ .data = [4]f32{ 0.5, -0.5, 0.0, 1.0 } },
+    //     .{ .data = [4]f32{ 0.5, 0.5, 0.0, 1.0 } },
+    //     .{ .data = [4]f32{ -0.5, 0.5, 0.0, 1.0 } },
+    // };
+    // var is = [_]u32{ 0, 1, 2, 2, 3, 0 };
+    var vs = [_]obj.Vertex(4, f32){
+        .{ .data = [4]f32{ -1.000000, -0.993521, 0.113647, 1.0 } },
+        .{ .data = [4]f32{ 1.000000, -0.993642, 0.112588, 1.0 } },
+        .{ .data = [4]f32{ -1.000000, 0.993642, -0.112588, 1.0 } },
+        .{ .data = [4]f32{ 1.000000, 0.993521, -0.113647, 1.0 } },
+    };
+    // var vs = [_]f32{
+    //     -1.000000, -0.993521, 0.113647,  1.0,
+    //     1.000000,  -0.993642, 0.112588,  1.0,
+    //     -1.000000, 0.993642,  -0.112588, 1.0,
+    //     1.000000,  0.993521,  -0.113647, 1.0,
+    // };
+    var is = [_]u32{ 1, 2, 4, 3 };
+    const o = obj.Obj{
+        .name = "hello",
+        .vertices = vs[0..],
+        .indices = is[0..],
+        .normals = &[_]obj.Vertex(3, f32){},
+    };
 
     var vertex_buffer: glad.GLuint = undefined;
     glad.glGenBuffers(1, &vertex_buffer);
@@ -76,11 +117,12 @@ pub fn main() anyerror!void {
     panicOnError("vertex bindbuffer");
     glad.glBufferData(
         glad.GL_ARRAY_BUFFER,
-        @sizeOf(f32) * vertices.len,
-        &vertices,
+        teddy.vertexBufferSize(),
+        teddy.vertices.ptr,
         glad.GL_STATIC_DRAW,
     );
     panicOnError("vertex bufferdata");
+    defer glad.glDeleteBuffers(1, &vertex_buffer);
 
     var vertex_array_object: glad.GLuint = undefined;
     glad.glGenVertexArrays(1, &vertex_array_object);
@@ -93,13 +135,28 @@ pub fn main() anyerror!void {
     panicOnError("vertex enable attrib array");
     glad.glVertexAttribPointer(
         0,
-        2,
+        teddy.vertexSize(),
         glad.GL_FLOAT,
         glad.GL_FALSE,
-        2 * @sizeOf(f32),
+        teddy.vertexStride(),
         null,
     );
     panicOnError("vertex attribpointer");
+
+    // const indices = [_]u32{ 0, 1, 2, 2, 3, 0 };
+    var index_buffer_object: glad.GLuint = undefined;
+    glad.glGenBuffers(1, &index_buffer_object);
+    panicOnError("index genbuffer");
+    glad.glBindBuffer(glad.GL_ELEMENT_ARRAY_BUFFER, index_buffer_object);
+    panicOnError("index bindbuffer");
+    glad.glBufferData(
+        glad.GL_ELEMENT_ARRAY_BUFFER,
+        teddy.indexBufferSize(),
+        teddy.indices.ptr,
+        glad.GL_STATIC_DRAW,
+    );
+    panicOnError("index bufferdata");
+    defer glad.glDeleteBuffers(1, &index_buffer_object);
 
     var program = try Program.create(vertex_shader_source, fragment_shader_source);
     program.use();
@@ -113,8 +170,13 @@ pub fn main() anyerror!void {
         glad.glClear(glad.GL_COLOR_BUFFER_BIT);
         panicOnError("clear");
 
-        glad.glDrawArrays(glad.GL_TRIANGLES, 0, 3);
-        panicOnError("drawArrays");
+        glad.glDrawElements(
+            glad.GL_TRIANGLES,
+            @intCast(c_int, teddy.indices.len),
+            glad.GL_UNSIGNED_INT,
+            null,
+        );
+        panicOnError("glDrawElements");
 
         glfw.glfwSwapBuffers(window);
 
@@ -122,17 +184,17 @@ pub fn main() anyerror!void {
     }
 }
 
-const ErrorPrintOptions = struct {
-    warn_on_no_error: bool,
-    panic_on_error: bool,
-};
-
 fn panicOnError(comptime label: []const u8) void {
     printGlError(
         label,
         ErrorPrintOptions{ .warn_on_no_error = false, .panic_on_error = true },
     );
 }
+
+const ErrorPrintOptions = struct {
+    warn_on_no_error: bool,
+    panic_on_error: bool,
+};
 
 fn printGlError(comptime label: []const u8, comptime options: ErrorPrintOptions) void {
     var gl_error = glad.glGetError();
@@ -170,7 +232,7 @@ const vertex_shader_source =
     \\layout(location = 0) in vec4 position;
     \\
     \\void main(void) {
-    \\    gl_Position = position;
+    \\    gl_Position = position * vec4(1, 1, 1, 15);
     \\}
 ;
 
@@ -180,6 +242,6 @@ const fragment_shader_source =
     \\layout(location = 0) out vec4 color;
     \\
     \\void main(void) {
-    \\    color = vec4(1.0, 0.0, 0.0, 1.0);
+    \\    color = vec4(0.5, 0.5, 0.5, 1.0);
     \\}
 ;
