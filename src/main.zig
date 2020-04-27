@@ -3,6 +3,7 @@ const obj = @import("./obj.zig");
 const mem = std.mem;
 const heap = std.heap;
 const debug = std.debug;
+const math = std.math;
 
 const Program = @import("./program.zig").Program;
 
@@ -11,6 +12,10 @@ const glfw = @cImport({
 });
 
 const glad = @import("glad.zig");
+
+var red_color: f32 = 1.0;
+var green_color: f32 = 0.0;
+var blue_color: f32 = 0.0;
 
 fn errorCallback(err: c_int, description: [*c]const u8) callconv(.C) void {
     var message: [*:0]const u8 = description;
@@ -30,8 +35,65 @@ fn handleKey(
         glfw.GLFW_KEY_ESCAPE, glfw.GLFW_KEY_Q => {
             glfw.glfwSetWindowShouldClose(window, glfw.GL_TRUE);
         },
+        glfw.GLFW_KEY_R => {
+            if (mods & 0b1 == 1) {
+                red_color = clampedDecrease(red_color, 0.1, 0.0);
+            } else {
+                red_color = clampedIncrease(red_color, 0.1, 1.0);
+            }
+            debug.warn(
+                "color: {}/{}/{}\n",
+                .{
+                    normalizeFloatToInt(u8, 255, red_color),
+                    normalizeFloatToInt(u8, 255, green_color),
+                    normalizeFloatToInt(u8, 255, blue_color),
+                },
+            );
+        },
+        glfw.GLFW_KEY_G => {
+            if (mods & 0b1 == 1) {
+                green_color = clampedDecrease(green_color, 0.1, 0.0);
+            } else {
+                green_color = clampedIncrease(green_color, 0.1, 1.0);
+            }
+            debug.warn(
+                "color: {}/{}/{}\n",
+                .{
+                    normalizeFloatToInt(u8, 255, red_color),
+                    normalizeFloatToInt(u8, 255, green_color),
+                    normalizeFloatToInt(u8, 255, blue_color),
+                },
+            );
+        },
+        glfw.GLFW_KEY_B => {
+            if (mods & 0b1 == 1) {
+                blue_color = clampedDecrease(blue_color, 0.1, 0.0);
+            } else {
+                blue_color = clampedIncrease(blue_color, 0.1, 1.0);
+            }
+            debug.warn(
+                "color: {}/{}/{}\n",
+                .{
+                    normalizeFloatToInt(u8, 255, red_color),
+                    normalizeFloatToInt(u8, 255, green_color),
+                    normalizeFloatToInt(u8, 255, blue_color),
+                },
+            );
+        },
         else => {},
     }
+}
+
+fn normalizeFloatToInt(comptime T: type, bounds: T, value: f32) T {
+    return @floatToInt(T, value * @intToFloat(f32, bounds));
+}
+
+fn clampedDecrease(f: f32, decrease: f32, bottom: f32) f32 {
+    return math.max(f - decrease, bottom);
+}
+
+fn clampedIncrease(f: f32, increase: f32, top: f32) f32 {
+    return math.min(f + increase, top);
 }
 
 pub fn main() anyerror!void {
@@ -74,94 +136,17 @@ pub fn main() anyerror!void {
         obj.rough_sphere_on_cube_data,
     );
 
-    const teddy = try obj.parseObj(
+    var teddy = try obj.parseObj(
         heap.page_allocator,
         obj.teddy_data,
     );
-
-    // const vertices = [_]f32{ -0.5, -0.5, 0.5, -0.5, 0.5, 0.5, -0.5, 0.5 };
-    // var vs = [_]f32{
-    //     -0.5, -0.5, 0.0, 0.5, -0.5, 0.0, 0.5, 0.5, 0.0, -0.5, 0.5, 0.0,
-    // };
-    // var vs = [_]obj.Vertex(4, f32){
-    //     .{ .data = [4]f32{ -0.5, -0.5, 0.0, 1.0 } },
-    //     .{ .data = [4]f32{ 0.5, -0.5, 0.0, 1.0 } },
-    //     .{ .data = [4]f32{ 0.5, 0.5, 0.0, 1.0 } },
-    //     .{ .data = [4]f32{ -0.5, 0.5, 0.0, 1.0 } },
-    // };
-    // var is = [_]u32{ 0, 1, 2, 2, 3, 0 };
-    var vs = [_]obj.Vertex(4, f32){
-        .{ .data = [4]f32{ -1.000000, -0.993521, 0.113647, 1.0 } },
-        .{ .data = [4]f32{ 1.000000, -0.993642, 0.112588, 1.0 } },
-        .{ .data = [4]f32{ -1.000000, 0.993642, -0.112588, 1.0 } },
-        .{ .data = [4]f32{ 1.000000, 0.993521, -0.113647, 1.0 } },
-    };
-    // var vs = [_]f32{
-    //     -1.000000, -0.993521, 0.113647,  1.0,
-    //     1.000000,  -0.993642, 0.112588,  1.0,
-    //     -1.000000, 0.993642,  -0.112588, 1.0,
-    //     1.000000,  0.993521,  -0.113647, 1.0,
-    // };
-    var is = [_]u32{ 1, 2, 4, 3 };
-    const o = obj.Obj{
-        .name = "hello",
-        .vertices = vs[0..],
-        .indices = is[0..],
-        .normals = &[_]obj.Vertex(3, f32){},
-    };
-
-    var vertex_buffer: glad.GLuint = undefined;
-    glad.glGenBuffers(1, &vertex_buffer);
-    panicOnError("vertex genbuffer");
-    glad.glBindBuffer(glad.GL_ARRAY_BUFFER, vertex_buffer);
-    panicOnError("vertex bindbuffer");
-    glad.glBufferData(
-        glad.GL_ARRAY_BUFFER,
-        teddy.vertexBufferSize(),
-        teddy.vertices.ptr,
-        glad.GL_STATIC_DRAW,
-    );
-    panicOnError("vertex bufferdata");
-    defer glad.glDeleteBuffers(1, &vertex_buffer);
-
-    var vertex_array_object: glad.GLuint = undefined;
-    glad.glGenVertexArrays(1, &vertex_array_object);
-    panicOnError("gen vertex array object");
-    glad.glBindVertexArray(vertex_array_object);
-    panicOnError("bind vertex array object");
-    defer glad.glDeleteVertexArrays(1, &vertex_array_object);
-
-    glad.glEnableVertexAttribArray(0);
-    panicOnError("vertex enable attrib array");
-    glad.glVertexAttribPointer(
-        0,
-        teddy.vertexSize(),
-        glad.GL_FLOAT,
-        glad.GL_FALSE,
-        teddy.vertexStride(),
-        null,
-    );
-    panicOnError("vertex attribpointer");
-
-    // const indices = [_]u32{ 0, 1, 2, 2, 3, 0 };
-    var index_buffer_object: glad.GLuint = undefined;
-    glad.glGenBuffers(1, &index_buffer_object);
-    panicOnError("index genbuffer");
-    glad.glBindBuffer(glad.GL_ELEMENT_ARRAY_BUFFER, index_buffer_object);
-    panicOnError("index bindbuffer");
-    glad.glBufferData(
-        glad.GL_ELEMENT_ARRAY_BUFFER,
-        teddy.indexBufferSize(),
-        teddy.indices.ptr,
-        glad.GL_STATIC_DRAW,
-    );
-    panicOnError("index bufferdata");
-    defer glad.glDeleteBuffers(1, &index_buffer_object);
 
     var program = try Program.create(vertex_shader_source, fragment_shader_source);
     program.use();
     panicOnError("use shaders");
     defer program.delete();
+
+    const uniform_location = glad.glGetUniformLocation(program.id, "u_Color");
 
     var gl_error: c_uint = glad.glGetError();
     std.debug.warn("gl_error before loop: {}\n", .{gl_error});
@@ -169,14 +154,9 @@ pub fn main() anyerror!void {
     while (glfw.glfwWindowShouldClose(window) == glad.GL_FALSE) {
         glad.glClear(glad.GL_COLOR_BUFFER_BIT);
         panicOnError("clear");
+        glad.glUniform4f(uniform_location, red_color, green_color, blue_color, 1.0);
 
-        glad.glDrawElements(
-            glad.GL_TRIANGLES,
-            @intCast(c_int, teddy.indices.len),
-            glad.GL_UNSIGNED_INT,
-            null,
-        );
-        panicOnError("glDrawElements");
+        teddy.render();
 
         glfw.glfwSwapBuffers(window);
 
@@ -232,7 +212,7 @@ const vertex_shader_source =
     \\layout(location = 0) in vec4 position;
     \\
     \\void main(void) {
-    \\    gl_Position = position * vec4(1, 1, 1, 15);
+    \\    gl_Position = position * vec4(1, 1, 1, 23);
     \\}
 ;
 
@@ -240,8 +220,9 @@ const fragment_shader_source =
     \\#version 330 core
     \\
     \\layout(location = 0) out vec4 color;
+    \\uniform vec4 u_Color;
     \\
     \\void main(void) {
-    \\    color = vec4(0.5, 0.5, 0.5, 1.0);
+    \\    color = u_Color;
     \\}
 ;
