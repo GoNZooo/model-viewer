@@ -114,9 +114,7 @@ pub fn main() anyerror!void {
         panicOnError("clear");
 
         glad.glDrawArrays(glad.GL_TRIANGLES, 0, 3);
-        panicOnError(
-            "drawArrays",
-        );
+        panicOnError("drawArrays");
 
         glfw.glfwSwapBuffers(window);
 
