@@ -1,6 +1,7 @@
 const std = @import("std");
 
 const glad = @import("./glad.zig");
+const math3d = @import("xq3d").math3d;
 
 pub const Program = struct {
     const Self = @This();
@@ -32,12 +33,26 @@ pub const Program = struct {
         return self;
     }
 
-    pub fn use(self: Self) void {
+    fn use(self: Self) void {
         glad.glUseProgram(self.id);
     }
 
-    pub fn delete(self: Self) void {
+    fn delete(self: Self) void {
         glad.glDeleteProgram(self.id);
+    }
+
+    fn setUniform4f(self: Self, name: [*:0]const u8, f1: f32, f2: f32, f3: f32, f4: f32) void {
+        const location = self.uniformLocation(name);
+        glad.glUniform4f(location, f1, f2, f3, f4);
+    }
+
+    fn setUniformMat4(self: Self, name: [*:0]const u8, mat4: math3d.Mat4) void {
+        const location = self.uniformLocation(name);
+        glad.glUniformMatrix4fv(location, 1, glad.GL_TRUE, &mat4.fields[0]);
+    }
+
+    fn uniformLocation(self: Self, uniform_name: [*:0]const u8) c_int {
+        return glad.glGetUniformLocation(self.id, uniform_name);
     }
 
     fn attachShader(self: Self, shader_id: glad.GLuint) void {
