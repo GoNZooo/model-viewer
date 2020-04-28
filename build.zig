@@ -9,8 +9,10 @@ pub fn build(b: *Builder) void {
     vulkan_exe.addPackagePath("xq3d", "./dependencies/zig-gamedev-lib/src/lib.zig");
 
     exe.addCSourceFile("dependencies/glad/src/glad.c", &[_][]const u8{"-std=c99"});
+    exe.addCSourceFile("dependencies/stb/stb_image_impl.c", &[_][]const u8{"-std=c99"});
     exe.addIncludeDir("dependencies/glad/include");
     exe.addIncludeDir("dependencies/glfw/include");
+    exe.addIncludeDir("dependencies/stb");
 
     vulkan_exe.addIncludeDir("dependencies/glfw/include");
     vulkan_exe.addIncludeDir("dependencies/vulkan/Include");
@@ -38,6 +40,15 @@ pub fn build(b: *Builder) void {
 
     vulkan_exe.setBuildMode(mode);
     vulkan_exe.install();
+
+    var image_tests = b.addTest("src/image.zig");
+    image_tests.addCSourceFile("dependencies/stb/stb_image_impl.c", &[_][]const u8{"-std=c99"});
+    image_tests.setBuildMode(mode);
+    image_tests.addIncludeDir("dependencies/stb");
+    image_tests.linkLibC();
+
+    const test_step = b.step("test", "Run tests");
+    test_step.dependOn(&image_tests.step);
 
     const run_cmd = exe.run();
     run_cmd.step.dependOn(b.getInstallStep());
