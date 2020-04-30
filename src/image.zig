@@ -44,5 +44,5 @@ test "load 'hello.png'" {
     testing.expectEqual(hello.width, 497);
     testing.expectEqual(hello.height, 454);
     testing.expectEqual(hello.channels, 4);
-    testing.expectEqual(hello.data.len, 902552);
+    testing.expectEqual(hello.data.len, 902_552);
 }
